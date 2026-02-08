@@ -17,10 +17,15 @@ import { RandomAgent } from "./rl/random_agent";
 import { SarsaAgent } from "./rl/sarsa";
 import { RunSpeed, createControls, speedToDashboardStride, speedToDelay } from "./ui/controls";
 import { Dashboard } from "./ui/dashboard";
-import { aggregateEpisodeMeans, ExperimentPanel } from "./ui/experiment_panel";
+import {
+  aggregateEpisodeMeans,
+  ExperimentPanel,
+  LiveEpisodeSnapshot,
+  LiveStepSnapshot,
+} from "./ui/experiment_panel";
 import { explainText } from "./ui/explain_box";
 import { MazeEditor } from "./ui/maze_editor";
-import { ScienceFairPanel } from "./ui/science_fair_panel";
+import { EpisodeHistory, EpisodeObservationSnapshot, ScienceFairPanel } from "./ui/science_fair_panel";
 import { LearnPanel } from "./ui/learn_panel";
 import { TutorialSystem } from "./ui/tutorial";
 import { ConfettiSystem } from "./ui/confetti";
@@ -459,7 +464,8 @@ async function main(): Promise<void> {
   const arcadeHero = document.createElement("section");
   arcadeHero.className = "panel";
   arcadeHero.append(threeWrap, threeControls);
-  arcadeContainer.append(arcadeHero);
+  // Append unifiedContainer to arcadeContainer so it is part of the DOM
+  arcadeContainer.append(arcadeHero, unifiedContainer);
 
   // -- DATA MODE --
   // Use the new ScienceFairPanel (Wizard)
@@ -488,10 +494,7 @@ async function main(): Promise<void> {
     // I need to find the click handler for starting experiment.
   };
 
-  const scienceDashboardSlot = document.createElement("div");
-  scienceDashboardSlot.className = "cockpit-dashboard science-runner-dashboard";
-  scienceDashboardSlot.append(dashboard.root);
-  experimentPanel.runnerRoot.append(dataRunBtn, scienceDashboardSlot);
+  experimentPanel.runnerRoot.append(dataRunBtn);
 
   // Append just the wizard root
   scienceContainer.append(sciencePanel.root);
@@ -554,6 +557,8 @@ async function main(): Promise<void> {
   const originalRunDemo = controls.runDemoBtn.onclick;
   controls.runDemoBtn.onclick = (e) => {
     setAppMode("ARCADE");
+    // Snap to grid/viewer on mobile
+    unifiedContainer.scrollIntoView({ behavior: "smooth" });
     if (originalRunDemo) originalRunDemo.call(controls.runDemoBtn, e);
   };
 
@@ -679,9 +684,6 @@ async function main(): Promise<void> {
         topRenderer.resize(raceMapSlot.clientWidth, raceMapSlot.clientHeight);
       }, 80);
     }
-    else if (mode === "SCIENCE") {
-      scienceDashboardSlot.append(dashboard.root);
-    }
 
     applyLearnActionButtons();
     updateLearnLivePanels();
@@ -768,7 +770,109 @@ async function main(): Promise<void> {
     racePolicyInfo.textContent = text;
   }
 
+  function raceNeedsMissionTraining(): boolean {
+    return progression.getClearedLevels().length === 0;
+  }
+
+  function getNextRaceJourneyMission(): LevelDef {
+    const unlocked = progression.getUnlockedLevels().sort((a, b) => a - b);
+    const targetLevelId = unlocked.find((id) => !progression.isCleared(id)) ?? unlocked[0] ?? LEVELS[0]?.id ?? 1;
+    return LEVELS.find((level) => level.id === targetLevelId) ?? LEVELS[0];
+  }
+
+  function showRaceJourneyModal(): void {
+    const existing = document.querySelector(".race-journey-overlay");
+    if (existing) {
+      existing.remove();
+    }
+
+    const mission = getNextRaceJourneyMission();
+    const coachPlan = adaptiveCoach.chooseCoachPlan(mission.id);
+    const recommendedAlgorithm = coachPlan.algorithm === "Random" ? "Q-learning" : coachPlan.algorithm;
+    const recommendedEpisodes = Math.max(50, coachPlan.episodes);
+    const recommendedSpeed: RunSpeed = "slow";
+
+    const overlay = document.createElement("div");
+    overlay.className = "mission-overlay race-journey-overlay";
+    const modal = document.createElement("div");
+    modal.className = "mission-modal race-journey-modal";
+    overlay.append(modal);
+
+    const title = document.createElement("h1");
+    title.textContent = "Race Locked: Train Your AI First";
+    const subtitle = document.createElement("p");
+    subtitle.className = "race-journey-subtitle";
+    subtitle.textContent =
+      "Before Challenge mode, complete one mission where you watch the AI learn and improve.";
+
+    const steps = document.createElement("ol");
+    steps.className = "race-journey-steps";
+    const stepTexts = [
+      `Open Mission ${mission.id}: ${mission.title}.`,
+      `Run Watch Learning with ${recommendedAlgorithm} for ${recommendedEpisodes} episodes at slow speed.`,
+      "Come back to Challenge and press Race Trained AI.",
+    ];
+    for (const text of stepTexts) {
+      const item = document.createElement("li");
+      item.textContent = text;
+      steps.append(item);
+    }
+
+    const coachTip = document.createElement("p");
+    coachTip.className = "race-journey-coach-tip";
+    coachTip.textContent = "Coach tip: write one observation while the AI trains so the student stays engaged.";
+
+    const actions = document.createElement("div");
+    actions.className = "race-journey-actions";
+    const goBtn = document.createElement("button");
+    goBtn.className = "btn-primary-action";
+    goBtn.textContent = `Go To Mission ${mission.id}`;
+    const closeBtn = document.createElement("button");
+    closeBtn.textContent = "Maybe Later";
+    actions.append(goBtn, closeBtn);
+
+    const close = () => overlay.remove();
+    closeBtn.onclick = close;
+    overlay.onclick = (event) => {
+      if (event.target === overlay) {
+        close();
+      }
+    };
+
+    goBtn.onclick = () => {
+      close();
+      setAppMode("LEARN");
+      const opened = learnPanel.openMission(mission.id);
+      if (!opened) {
+        learnPanel.returnToSagaMap();
+      }
+      controls.algorithmSelect.value = recommendedAlgorithm;
+      controls.episodesInput.value = String(recommendedEpisodes);
+      controls.speedSelect.value = recommendedSpeed;
+      updateRaceButtonState();
+      setStatus(
+        `Mission ${mission.id} loaded. Press Start Guided Demo to train your AI, then return to Challenge to race.`
+      );
+      setTimeout(() => controls.runDemoBtn.focus(), 0);
+    };
+
+    modal.append(title, subtitle, steps, coachTip, actions);
+    document.body.append(overlay);
+  }
+
   function updateRaceButtonState(): void {
+    if (raceNeedsMissionTraining()) {
+      const mission = getNextRaceJourneyMission();
+      controls.raceBtn.textContent = "Unlock Race In Mission";
+      raceStartBtn.textContent = "Unlock Race In Mission";
+      controls.raceBtn.title = `Complete Mission ${mission.id} and train an AI before racing.`;
+      raceStartBtn.title = controls.raceBtn.title;
+      setRacePolicyInfo(
+        `Race is locked until a mission is completed. Next step: Mission ${mission.id} (${mission.lesson}).`
+      );
+      return;
+    }
+
     const snapshot = currentRacePolicy();
     if (snapshot) {
       const readyLabel = snapshot.source === "demo" ? "Race Demo AI" : "Race Trained AI";
@@ -986,6 +1090,7 @@ async function main(): Promise<void> {
 
   function cancelRun(): void {
     activeToken += 1;
+    sciencePanel.cancelPendingEpisodeObservation();
     sound.stopAmbient();
     raceCountdown.textContent = "";
     runMode = "idle";
@@ -1338,7 +1443,7 @@ async function main(): Promise<void> {
       ? clampInt(Number(sciencePanel.scienceEpisodesInput.value || 50), 1, 500)
       : getEpisodes();
     const trials = useScienceInputs
-      ? clampInt(Number(sciencePanel.scienceTrialsInput.value || 3), 3, 20)
+      ? clampInt(Number(sciencePanel.scienceTrialsInput.value || 1), 1, 20)
       : getTrials();
     const algorithms: AlgorithmType[] = useScienceInputs
       ? getScienceAlgorithms()
@@ -1349,85 +1454,218 @@ async function main(): Promise<void> {
       setRunningUi(runMode);
       return;
     }
+    if (useScienceInputs && algorithms.length < 3) {
+      setStatus("Select at least 3 algorithms in Science Setup before starting the test.");
+      runMode = "idle";
+      setRunningUi(runMode);
+      return;
+    }
 
     controls.episodesInput.value = String(episodes);
     controls.trialsInput.value = String(trials);
     const totalWork = algorithms.length * trials * episodes;
     let completedWork = 0;
 
-    setStatus(`Running experiment: ${algorithms.join(", ")} | ${trials} trials x ${episodes} episodes.`);
+    setStatus(`Running experiment: ${algorithms.join(", ")} | ${trials} trials x ${episodes} episodes with episode logs.`);
     setAppMode("SCIENCE");
     experimentPanel.clearCsvExports();
     experimentPanel.setStatus(
-      "Running fair test. This run trains each algorithm from scratch for every trial, then compares results."
+      "Running fair test with required student checkpoints each episode."
     );
     experimentPanel.setProgress(0, totalWork, "Starting...");
 
     const rawRows: RawRow[] = [];
     const metricsByAlgorithm = new Map<string, EpisodeMetrics[][]>();
+    for (const algorithm of algorithms) {
+      metricsByAlgorithm.set(algorithm, []);
+    }
+    const algorithmSeedOffsets = new Map(
+      algorithms.map((algorithm, idx) => [algorithm, (idx + 1) * 100_003] as const)
+    );
+    const scienceStepDelayMs = 180;
+    const scienceAnimMs = 260;
 
     const seedBase = 8800;
+    const liveAlgorithms = algorithms.slice(0, 3);
+    experimentPanel.configureLiveComparison(liveAlgorithms);
+    sciencePanel.beginEpisodeObservationSession(trials * episodes);
+    const liveRenderers = liveAlgorithms.map((algorithm, index) => {
+      const canvas = experimentPanel.getLiveComparisonCanvas(index);
+      if (!canvas) return null;
+      const renderer = new TopDownCanvasRenderer(canvas, currentMaze);
+      const width = canvas.clientWidth || canvas.width || 300;
+      const height = canvas.clientHeight || canvas.height || 300;
+      renderer.resize(width, height);
+      renderer.setLayout(currentMaze);
+      renderer.setAgentState({ row: currentMaze.start.row, col: currentMaze.start.col, dir: 1 });
+      experimentPanel.setLiveComparisonMessage(index, `${algorithm}: waiting for trial 1.`);
+      return renderer;
+    });
 
-    for (const algorithm of algorithms) {
-      experimentPanel.setStatus(`Running ${algorithm}: preparing ${trials} trials...`);
-      const trialsData: EpisodeMetrics[][] = [];
+    const resizeLiveRenderers = () => {
+      for (const renderer of liveRenderers) {
+        if (!renderer) continue;
+        const width = renderer.canvas.clientWidth || renderer.canvas.width || 300;
+        const height = renderer.canvas.clientHeight || renderer.canvas.height || 300;
+        renderer.resize(width, height);
+      }
+    };
+    setTimeout(resizeLiveRenderers, 0);
+
+    try {
       for (let trial = 1; trial <= trials; trial += 1) {
         const seed = seedBase + trial;
-        const agent = makeAgent(algorithm);
-        const env = new MazeEnv(currentMaze);
-        agent.startTrial(seed);
-        setStatus(`Experiment: ${algorithm} trial ${trial}/${trials} training...`);
+        setStatus(`Experiment: trial ${trial}/${trials} setup complete. Running side-by-side episode ${1}/${episodes}.`);
 
-        const metricsForTrial: EpisodeMetrics[] = [];
+        const contexts = algorithms.map((algorithm) => {
+          const algorithmSeed = seed + (algorithmSeedOffsets.get(algorithm) ?? 0);
+          const agent = makeAgent(algorithm);
+          const env = new MazeEnv(currentMaze);
+          agent.startTrial(algorithmSeed);
+          const displayIndex = liveAlgorithms.indexOf(algorithm);
+          if (displayIndex >= 0) {
+            const renderer = liveRenderers[displayIndex];
+            renderer?.setLayout(currentMaze);
+            renderer?.setAgentState({ row: currentMaze.start.row, col: currentMaze.start.col, dir: 1 });
+            experimentPanel.setLiveComparisonMessage(displayIndex, `${algorithm}: trial ${trial}/${trials} ready.`);
+          }
+          return {
+            algorithm,
+            agent,
+            env,
+            displayIndex,
+            metricsForTrial: [] as EpisodeMetrics[],
+            algorithmSeed,
+          };
+        });
 
         for (let ep = 0; ep < episodes; ep += 1) {
-          const metrics = await runEpisode({
-            token,
-            env,
-            agent,
-            rngSeed: seed + ep * 31,
-            episodeIndex: ep,
-            totalEpisodes: episodes,
-          });
-
-          if (metrics == null) {
+          if (!(await gate(token))) {
             experimentPanel.setStatus("Experiment canceled.");
             experimentPanel.setProgress(completedWork, totalWork, "Canceled");
             return;
           }
 
-          metricsForTrial.push(metrics);
-          rawRows.push({
-            algorithm,
-            maze_name: currentMaze.name,
+          const detail = `trial ${trial}/${trials} | episode ${ep + 1}/${episodes}`;
+          experimentPanel.setStatus(`Running ${detail} (three 2D views live)...`);
+          setStatus(`Science mode running ${detail}.`);
+
+          const episodeResults = await Promise.all(
+            contexts.map(async (ctx) => {
+              const displayIndex = ctx.displayIndex;
+              const renderer = displayIndex >= 0 ? liveRenderers[displayIndex] : null;
+              const metrics = await runEpisode({
+                token,
+                env: ctx.env,
+                agent: ctx.agent,
+                rngSeed: ctx.algorithmSeed + ep * 31,
+                episodeIndex: ep,
+                totalEpisodes: episodes,
+                onReset: () => {
+                  renderer?.setAgentState(ctx.env.state);
+                },
+                onStep: renderer
+                  ? async (info) => {
+                    renderer.stepTransition(info.step, scienceAnimMs);
+                    const stepSnapshot: LiveStepSnapshot = {
+                      algorithm: ctx.algorithm,
+                      trial,
+                      episode: ep + 1,
+                      step: info.step.stepCount,
+                      actionName: ACTION_NAMES[info.step.action],
+                      reward: info.step.reward,
+                      episodeReturn: info.step.episodeReturn,
+                      epsilon: info.epsilon,
+                      explored: info.explored,
+                      rollingSuccessLast10: rollingSuccess(ctx.metricsForTrial, 10),
+                      rollingAvgStepsLast10: rollingAvgSteps(ctx.metricsForTrial, 10),
+                      qValues: info.qValues,
+                    };
+                    experimentPanel.updateLiveStepSnapshot(displayIndex, stepSnapshot);
+                    await sleep(scienceStepDelayMs);
+                  }
+                  : undefined,
+              });
+              return { ctx, metrics };
+            })
+          );
+
+          const snapshots: EpisodeObservationSnapshot[] = [];
+
+          for (const result of episodeResults) {
+            const { ctx, metrics } = result;
+            if (metrics == null) {
+              experimentPanel.setStatus("Experiment canceled.");
+              experimentPanel.setProgress(completedWork, totalWork, "Canceled");
+              return;
+            }
+
+            ctx.metricsForTrial.push(metrics);
+            rawRows.push({
+              algorithm: ctx.algorithm,
+              maze_name: currentMaze.name,
+              trial,
+              seed: ctx.algorithmSeed,
+              episode: ep + 1,
+              steps: metrics.steps,
+              success: metrics.success ? 1 : 0,
+              episode_return: Number(metrics.episodeReturn.toFixed(4)),
+            });
+
+            completedWork += 1;
+
+            if (ctx.displayIndex >= 0) {
+              const liveSnapshot: LiveEpisodeSnapshot = {
+                algorithm: ctx.algorithm,
+                trial,
+                episode: ep + 1,
+                success: metrics.success,
+                steps: metrics.steps,
+                episodeReturn: metrics.episodeReturn,
+              };
+              experimentPanel.updateLiveEpisodeSnapshot(ctx.displayIndex, liveSnapshot);
+            }
+            snapshots.push({
+              algorithm: ctx.algorithm,
+              success: metrics.success,
+              steps: metrics.steps,
+              episodeReturn: metrics.episodeReturn,
+            });
+          }
+
+          experimentPanel.setStatus(`Paused for student observation: ${detail}`);
+          experimentPanel.setProgress(completedWork, totalWork, detail);
+          setStatus(`Science mode paused at ${detail}. Write the episode checkpoint to continue.`);
+
+          const history: EpisodeHistory[] = episodeResults.map(r => ({
+            algorithm: r.ctx.algorithm,
+            metrics: r.ctx.metricsForTrial
+          }));
+
+          const checkpointSaved = await sciencePanel.waitForEpisodeObservation({
             trial,
-            seed,
+            totalTrials: trials,
             episode: ep + 1,
-            steps: metrics.steps,
-            success: metrics.success ? 1 : 0,
-            episode_return: Number(metrics.episodeReturn.toFixed(4)),
+            totalEpisodes: episodes,
+            snapshots,
+            history,
           });
 
-          completedWork += 1;
-
-          if (ep === 0 || (ep + 1) % 5 === 0 || ep + 1 === episodes) {
-            const detail = `${algorithm} | trial ${trial}/${trials} | episode ${ep + 1}/${episodes}`;
-            experimentPanel.setStatus(`Running ${detail}`);
-            experimentPanel.setProgress(completedWork, totalWork, detail);
-            setStatus(
-              `Science mode: ${Math.round((completedWork / Math.max(1, totalWork)) * 100)}% (${detail})`
-            );
+          if (!checkpointSaved || !(await gate(token))) {
+            experimentPanel.setStatus("Experiment canceled.");
+            experimentPanel.setProgress(completedWork, totalWork, "Canceled");
+            return;
           }
         }
 
-        trialsData.push(metricsForTrial);
-        if (!(await gate(token))) {
-          experimentPanel.setStatus("Experiment canceled.");
-          experimentPanel.setProgress(completedWork, totalWork, "Canceled");
-          return;
+        for (const ctx of contexts) {
+          metricsByAlgorithm.get(ctx.algorithm)?.push(ctx.metricsForTrial);
         }
       }
-      metricsByAlgorithm.set(algorithm, trialsData);
+    } finally {
+      for (const renderer of liveRenderers) {
+        renderer?.destroy();
+      }
     }
 
     const summaryRows = summarizeExperiment(currentMaze.name, episodes, trials, metricsByAlgorithm);
@@ -1897,6 +2135,13 @@ async function main(): Promise<void> {
     if (editor.isEnabled()) {
       setStatus("Finish editing first. Save Edited Maze (or stop editing) before race.");
       setAppMode("LAB");
+      return;
+    }
+
+    if (raceNeedsMissionTraining()) {
+      setAppMode("CHALLENGE");
+      showRaceJourneyModal();
+      setStatus("Race is locked until one mission is completed with AI training.");
       return;
     }
 

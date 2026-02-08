@@ -398,6 +398,14 @@ export class LearnPanel {
     this.exitToSagaMap();
   }
 
+  public openMission(levelId: number): boolean {
+    if (!this.progression.isUnlocked(levelId)) {
+      return false;
+    }
+    this.startLesson(levelId);
+    return true;
+  }
+
   private viewMode: "SAGA" | "MISSION" = "SAGA";
 
   private render() {

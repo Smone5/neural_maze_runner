@@ -1,6 +1,9 @@
+import { Modal } from "./modal";
+
 export class LandingPage {
     public root: HTMLDivElement;
     private onStart: () => void;
+    private startInProgress = false;
 
     constructor(onStart: () => void) {
         this.onStart = onStart;
@@ -34,7 +37,9 @@ export class LandingPage {
         const startBtn = document.createElement("button");
         startBtn.className = "btn-start-mission";
         startBtn.innerHTML = `<span>INITIALIZE MISSION</span> <div class="btn-glare"></div>`;
-        startBtn.onclick = () => this.handleStart();
+        startBtn.onclick = () => {
+            void this.handleStart();
+        };
 
         // 3. Features Grid
         const grid = document.createElement("div");
@@ -85,12 +90,18 @@ export class LandingPage {
         link.referrerPolicy = "no-referrer";
         link.className = "footer-link";
         link.setAttribute("aria-label", "Open AI Voyages website (external link)");
-        link.onclick = (event) => {
-            const ok = window.confirm(
-                "This opens an external website. Please ask a parent or teacher first. Continue?"
-            );
-            if (!ok) {
-                event.preventDefault();
+        link.onclick = async (event) => {
+            event.preventDefault();
+            const modal = new Modal();
+            const ok = await modal.confirm({
+                title: "Safety Notice",
+                message: "This opens an external website. Please ask a parent or teacher first. Continue?",
+                confirmText: "Continue",
+                cancelText: "Cancel",
+                variant: "safety"
+            });
+            if (ok) {
+                window.open(link.href, "_blank", "noopener,noreferrer");
             }
         };
 
@@ -118,7 +129,40 @@ export class LandingPage {
         this.root.append(content);
     }
 
-    private handleStart() {
+    private isPhoneDevice(): boolean {
+        const ua = navigator.userAgent || "";
+        const isIpad =
+            /iPad/i.test(ua) ||
+            (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+        const isTabletUa = /Tablet|PlayBook|Silk|Kindle|iPad/i.test(ua) || (/Android/i.test(ua) && !/Mobile/i.test(ua));
+        const isPhoneUa = /iPhone|iPod|Android.*Mobile|Windows Phone|BlackBerry|Opera Mini|IEMobile|webOS/i.test(ua);
+        const narrowTouchViewport =
+            window.matchMedia("(max-width: 900px)").matches &&
+            window.matchMedia("(pointer: coarse)").matches;
+
+        return isPhoneUa || (narrowTouchViewport && !isIpad && !isTabletUa);
+    }
+
+    private async handleStart(): Promise<void> {
+        if (this.startInProgress) return;
+        this.startInProgress = true;
+
+        if (this.isPhoneDevice()) {
+            const modal = new Modal();
+            const proceed = await modal.confirm({
+                title: "Mobile Use Notice",
+                message:
+                    "This experience works on mobile, but it is optimized for desktop/laptop or tablet. On phones, controls and charts may be harder to use. Continue on mobile anyway?",
+                confirmText: "Continue on Mobile",
+                cancelText: "Go Back",
+                variant: "warning"
+            });
+            if (!proceed) {
+                this.startInProgress = false;
+                return;
+            }
+        }
+
         // Animate out
         this.root.classList.add("fade-out");
 

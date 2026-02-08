@@ -64,13 +64,30 @@ export function triggerDownload(filename: string, text: string, mime = "text/pla
   }
 }
 
+export function canvasToOpaquePngDataUrl(canvas: HTMLCanvasElement): string {
+  const flattened = document.createElement("canvas");
+  flattened.width = canvas.width;
+  flattened.height = canvas.height;
+
+  const ctx = flattened.getContext("2d");
+  if (!ctx) {
+    throw new Error("Canvas 2D context not available for PNG export.");
+  }
+
+  // Flatten transparency so charts remain readable in PDF print pipelines.
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, flattened.width, flattened.height);
+  ctx.drawImage(canvas, 0, 0);
+  return flattened.toDataURL("image/png");
+}
+
 export function triggerPngDownload(filename: string, canvas: HTMLCanvasElement): boolean {
   if (canvas.width === 0 || canvas.height === 0) {
     console.warn(`PNG export skipped for ${filename}: canvas has no size.`);
     return false;
   }
   try {
-    const url = canvas.toDataURL("image/png");
+    const url = canvasToOpaquePngDataUrl(canvas);
     clickDownloadLink(filename, url);
     return true;
   } catch (error) {
