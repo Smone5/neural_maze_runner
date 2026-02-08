@@ -1,6 +1,6 @@
-# Web RL Maze Lab
+# Neural Maze Runner
 
-A kid-friendly web reinforcement learning lab for science fairs.
+A kid-friendly web reinforcement learning lab for science fairs. I made this quick one day for my son!
 
 ## Stack
 - Vite + TypeScript
