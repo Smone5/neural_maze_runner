@@ -59,3 +59,6 @@ The repo also includes `vercel.json` with these settings preconfigured.
 - Dependent variables: success rate, steps, episode return
 - Controlled variables: maze, reward function, start/goal, episodes, max steps, seed policy
 - Minimum trials: 3
+
+## License
+Free for everyone! This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
