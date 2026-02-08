@@ -118,7 +118,7 @@ export const LEVELS: LevelDef[] = [
         title: "5. The Race",
         lesson: "Efficiency",
         badge: "RL Hero Champion",
-        hint: "Wide open space with obstacles. The challenge is to find the absolute shortest diagonal path.",
+        hint: "Wide open space with obstacles. The challenge is to learn the shortest safe route with as few extra turns as possible.",
         maze: {
             name: "The Race",
             size: 11,
@@ -143,7 +143,7 @@ export const LEVELS: LevelDef[] = [
         title: "6. The Long Run",
         lesson: "Discount Factors",
         badge: "Future Visionary",
-        hint: "A very long path with small rewards along the way. Will the agent focus on the big goal at the end?",
+        hint: "A very long path where planning ahead matters. Will the agent stay patient enough to reach the big goal at the end?",
         maze: {
             name: "The Long Run",
             size: 13,
@@ -170,7 +170,7 @@ export const LEVELS: LevelDef[] = [
         title: "7. The Quick Study",
         lesson: "Learning Rate",
         badge: "Fast Learner",
-        hint: "A maze that changes slightly (conceptually). How fast can the agent update its memory?",
+        hint: "A tight maze with many repeated decisions. Can the agent update its memory fast without becoming unstable?",
         maze: {
             name: "The Quick Study",
             size: 9,
@@ -193,7 +193,7 @@ export const LEVELS: LevelDef[] = [
         title: "8. Sparse Secrets",
         lesson: "Sparse Rewards",
         badge: "Persistence Pro",
-        hint: "A large open room where the goal is hard to find. The agent gets NO rewards until it hits the goal.",
+        hint: "A large open room where goal rewards are rare. The agent still gets small step penalties, so persistence matters.",
         maze: {
             name: "Sparse Secrets",
             size: 15,
@@ -222,7 +222,7 @@ export const LEVELS: LevelDef[] = [
         title: "9. The General",
         lesson: "Generalization",
         badge: "Master Generalizer",
-        hint: "Multiple similar rooms. Can the agent use knowledge from one room to solve the others?",
+        hint: "Many repeated maze patterns. Can the agent reuse what it learned in one area to solve similar areas faster?",
         maze: {
             name: "The General",
             size: 13,
@@ -249,7 +249,7 @@ export const LEVELS: LevelDef[] = [
         title: "10. The Ultimate Test",
         lesson: "Full Integration",
         badge: "RL Grandmaster",
-        hint: "The final challenge. All concepts combined. Traps, long paths, and sparse rewards.",
+        hint: "The final challenge. All core ideas combined: planning, exploration, efficiency, and evidence-based comparisons.",
         maze: {
             name: "The Ultimate Test",
             size: 17,

@@ -60,6 +60,27 @@ export class TutorialSystem {
           <p><strong>Control Group:</strong> The Random Agent (to see what happens with NO learning).</p>
           <p>Let's run the experiment and see if you are right!</p>
         `
+            },
+            {
+                title: "Your Missions 🚀",
+                html: `
+          <p>In the <strong>Missions</strong> tab, you'll solve puzzles by training AI.</p>
+          <p>Each mission has a simple flow:</p>
+          <ol>
+            <li><strong>The Lesson:</strong> Read the strategy on the left sidebar.</li>
+            <li><strong>Watch Learning:</strong> Click the big button to watch the AI practice.</li>
+            <li><strong>Mastery Quiz:</strong> When you're ready, answer a question to finish!</li>
+          </ol>
+        `
+            },
+            {
+                title: "Cleared for Takeoff! ✅",
+                html: `
+          <p>Solving missions earns you <strong>XP</strong> and unlocks new levels.</p>
+          <p>If you ever get stuck, look for me (Kurt) in the sidebar for tips.</p>
+          <p>Good luck, Scientist!</p>
+          <div style="text-align: center; font-size: 3rem; margin: 20px;">🎮 🧠</div>
+        `
             }
         ];
 

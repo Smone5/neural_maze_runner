@@ -37,7 +37,6 @@ import { LandingPage } from "./ui/landing_page";
 type RunMode = "idle" | "demo" | "experiment" | "race";
 type AppMode = "LEARN" | "LAB" | "ARCADE" | "SCIENCE" | "CHALLENGE";
 const KID_HEADSTART_MS = 1500;
-const CHALLENGE_MAZE_CURRENT = "__current__";
 
 import { SoundFx } from "./core/sound_fx";
 
@@ -74,6 +73,8 @@ interface RaceState {
   aiBumps: number;
   kidSuccess: boolean;
   aiSuccess: boolean;
+  kidDone: boolean;
+  aiDone: boolean;
   kidFinishTimeMs: number | null;
   aiFinishTimeMs: number | null;
   round: number;
@@ -361,7 +362,14 @@ async function main(): Promise<void> {
     controls,
     threeWrap,
     viewerPanel,
-    dashboard
+    dashboard,
+    (levelId: number, badge: string) => {
+      refreshChallengeMazeOptions();
+      sound.play("levelComplete");
+      confetti.fire();
+      setStatus(`Mission ${levelId} complete. Arcade award unlocked.`);
+      showMissionComplete(badge);
+    }
   );
   learnContainer.append(learnPanel.root);
 
@@ -662,6 +670,11 @@ async function main(): Promise<void> {
       arcadeHero.append(threeControls);
       resizeTopRenderer();
     } else if (mode === "CHALLENGE") {
+      // Keep Challenge visuals aligned with the selected mission option.
+      if (runMode !== "race") {
+        applySelectedChallengeMaze(false);
+      }
+
       // Background: 3D View (Full Cockpit Backdrop)
       raceThreeSlot.append(threeWrap);
       // HUD Top-Right: Tactical Minimap
@@ -771,7 +784,7 @@ async function main(): Promise<void> {
   }
 
   function raceNeedsMissionTraining(): boolean {
-    return progression.getClearedLevels().length === 0;
+    return !progression.isCleared(1);
   }
 
   function getNextRaceJourneyMission(): LevelDef {
@@ -851,7 +864,7 @@ async function main(): Promise<void> {
       controls.speedSelect.value = recommendedSpeed;
       updateRaceButtonState();
       setStatus(
-        `Mission ${mission.id} loaded. Press Start Guided Demo to train your AI, then return to Challenge to race.`
+        `Mission ${mission.id} loaded. Complete the Try It checklist and press Start Watch Learning, then return to Challenge to race.`
       );
       setTimeout(() => controls.runDemoBtn.focus(), 0);
     };
@@ -905,29 +918,63 @@ async function main(): Promise<void> {
 
   function refreshChallengeMazeOptions(): void {
     const previousValue = raceMissionSelect.value;
-    const unlocked = new Set<number>(progression.getUnlockedLevels());
+    const unlockedIds = progression.getUnlockedLevels().sort((a, b) => a - b);
+    const unlocked = new Set<number>(unlockedIds);
+    const missionTrainingRequired = raceNeedsMissionTraining();
     raceMissionSelect.innerHTML = "";
 
-    const currentOption = document.createElement("option");
-    currentOption.value = CHALLENGE_MAZE_CURRENT;
-    currentOption.textContent = `Current maze: ${currentMaze.name}`;
-    raceMissionSelect.append(currentOption);
+    const availableLevels = missionTrainingRequired
+      ? LEVELS.filter((level) => level.id === 1)
+      : LEVELS.filter((level) => unlocked.has(level.id));
 
-    for (const level of LEVELS) {
-      if (!unlocked.has(level.id)) continue;
+    for (const level of availableLevels) {
       const option = document.createElement("option");
       option.value = String(level.id);
       option.textContent = `Mission ${level.id}: ${level.maze.name}`;
       raceMissionSelect.append(option);
     }
 
-    if (currentLevelId != null && unlocked.has(currentLevelId)) {
+    if (currentLevelId != null && availableLevels.some((level) => level.id === currentLevelId)) {
       raceMissionSelect.value = String(currentLevelId);
       return;
     }
 
     const hasPrevious = Array.from(raceMissionSelect.options).some((option) => option.value === previousValue);
-    raceMissionSelect.value = hasPrevious ? previousValue : CHALLENGE_MAZE_CURRENT;
+    if (hasPrevious) {
+      raceMissionSelect.value = previousValue;
+      return;
+    }
+
+    const defaultMissionId = missionTrainingRequired
+      ? 1
+      : availableLevels[0]?.id ?? unlockedIds[0] ?? LEVELS[0]?.id;
+    if (defaultMissionId != null) {
+      raceMissionSelect.value = String(defaultMissionId);
+    }
+  }
+
+  function applySelectedChallengeMaze(showStatus = true): boolean {
+    const missionId = Number(raceMissionSelect.value);
+    const level = LEVELS.find((item) => item.id === missionId);
+    const missionAllowed = missionId === 1 || progression.isUnlocked(missionId);
+    if (!level || !missionAllowed) {
+      refreshChallengeMazeOptions();
+      setStatus("That mission is locked. Clear earlier missions first.");
+      return false;
+    }
+
+    const needsLoad = currentLevelId !== missionId || currentMaze.name !== level.maze.name;
+    currentLevelId = missionId;
+    editor.setEnabled(false);
+    topRenderer.setEditorEnabled(false);
+    controls.editToggle.textContent = "Edit Maze";
+    if (needsLoad) {
+      applyMaze(loadLevel(missionId));
+    }
+    if (showStatus) {
+      setStatus(`Challenge maze set to Mission ${missionId}: ${level.maze.name}.`);
+    }
+    return true;
   }
 
   function getEpisodes(): number {
@@ -950,6 +997,11 @@ async function main(): Promise<void> {
 
   function setStatus(text: string): void {
     controls.statusLine.textContent = text;
+  }
+
+  function updateTurboBadge(): void {
+    const turboRunning = runMode === "demo" && controls.speedSelect.value === "turbo";
+    controls.turboBadge.classList.toggle("active", turboRunning);
   }
 
 
@@ -995,7 +1047,7 @@ async function main(): Promise<void> {
 
     controls.root.classList.remove("mission-running");
     controls.root.style.display = "block";
-    dashboard.root.style.display = "none";
+    dashboard.root.style.display = dashboard.hasData() ? "block" : "none";
   }
 
   function setRunningUi(mode: RunMode): void {
@@ -1016,6 +1068,7 @@ async function main(): Promise<void> {
     controls.pauseBtn.textContent = paused ? "Resume" : "Pause";
     applyLearnActionButtons();
     updateLearnLivePanels();
+    updateTurboBadge();
   }
 
   // switchTab logic removed - ScienceFairPanel handles wizard navigation internally.
@@ -1233,11 +1286,9 @@ async function main(): Promise<void> {
         episodeIndex: ep,
         totalEpisodes: episodes,
         onReset: () => {
-          if (!turbo) {
-            topRenderer.setAgentState(env.state);
-            if (threeViewer.ready) {
-              threeViewer.setAgentState(env.state);
-            }
+          topRenderer.setAgentState(env.state);
+          if (threeViewer.ready) {
+            threeViewer.setAgentState(env.state);
           }
         },
         onStep: turbo
@@ -1337,6 +1388,10 @@ async function main(): Promise<void> {
           },
           "Turbo mode: animations and per-step explain updates are disabled for faster training."
         );
+
+        setStatus(`Turbo learning: ${algorithm} episode ${ep + 1}/${episodes}...`);
+        // Let the browser paint between turbo episodes so mission mode visibly updates.
+        await sleep(0);
       }
       if (!(await gate(token))) {
         return;
@@ -1366,7 +1421,7 @@ async function main(): Promise<void> {
     if (token !== activeToken) return;
 
     if (currentLevelId !== null) {
-      const missionInsight = adaptiveCoach.recordMissionRun(currentLevelId, {
+      adaptiveCoach.recordMissionRun(currentLevelId, {
         algorithm,
         episodes: completed.length,
         speed: lastRunSpeed,
@@ -1375,20 +1430,6 @@ async function main(): Promise<void> {
         bumpRate: totalDecisionSteps === 0 ? 0 : bumpSteps / totalDecisionSteps,
       });
       learnPanel.refresh();
-
-      const level = LEVELS.find((item) => item.id === currentLevelId);
-      const recentWindow = Math.min(10, completed.length);
-      const recentSuccessRate = rollingSuccess(completed, recentWindow);
-      const passedMission = missionInsight.status === "mastered" || recentSuccessRate >= 70;
-      if (level && !progression.isCleared(level.id) && passedMission) {
-        const maxLevelId = LEVELS[LEVELS.length - 1]?.id ?? level.id;
-        progression.clearLevel(level.id, level.badge, maxLevelId);
-        refreshChallengeMazeOptions();
-        sound.play("levelComplete");
-        confetti.fire();
-        learnPanel.refresh();
-        showMissionComplete(level.badge);
-      }
     }
 
     if (!earlyStopped && algorithm !== "Random") {
@@ -1440,10 +1481,10 @@ async function main(): Promise<void> {
 
     const useScienceInputs = currentMode === "SCIENCE";
     const episodes = useScienceInputs
-      ? clampInt(Number(sciencePanel.scienceEpisodesInput.value || 50), 1, 500)
+      ? clampInt(Number(sciencePanel.scienceEpisodesInput.value || 15), 1, 500)
       : getEpisodes();
     const trials = useScienceInputs
-      ? clampInt(Number(sciencePanel.scienceTrialsInput.value || 1), 1, 20)
+      ? clampInt(Number(sciencePanel.scienceTrialsInput.value || 3), 1, 20)
       : getTrials();
     const algorithms: AlgorithmType[] = useScienceInputs
       ? getScienceAlgorithms()
@@ -1945,6 +1986,20 @@ async function main(): Promise<void> {
     sound.setAmbientTension(Math.max(raceCloseness(state.kidEnv), raceCloseness(state.aiEnv)));
   }
 
+  function raceProgressMessage(state: RaceState): string {
+    if (state.kidDone && !state.aiDone) {
+      return state.kidSuccess
+        ? "Student finished. Waiting for Teacher Bot to finish for time comparison..."
+        : "Student reached step limit. Waiting for Teacher Bot to finish...";
+    }
+    if (state.aiDone && !state.kidDone) {
+      return state.aiSuccess
+        ? "Teacher finished. Keep moving to set your time for comparison."
+        : "Teacher reached step limit. Keep moving to finish your run.";
+    }
+    return "Race in progress...";
+  }
+
   function resolveRoundWinner(state: RaceState): { winner: "Kid" | "AI" | "Tie" | "None"; message: string } {
     if (state.kidSuccess && state.aiSuccess) {
       const kidT = state.kidFinishTimeMs ?? Number.MAX_SAFE_INTEGER;
@@ -2001,6 +2056,8 @@ async function main(): Promise<void> {
     state.aiBumps = 0;
     state.kidSuccess = false;
     state.aiSuccess = false;
+    state.kidDone = false;
+    state.aiDone = false;
     state.kidFinishTimeMs = null;
     state.aiFinishTimeMs = null;
 
@@ -2114,16 +2171,24 @@ async function main(): Promise<void> {
         threeViewer.stepGhostTransition(step, raceSpeed);
       }
 
-      if (step.success) {
+      if (step.success && !state.aiSuccess) {
         state.aiSuccess = true;
         state.aiFinishTimeMs = performance.now() - state.startAt;
       }
+      if (step.success || step.maxStepsReached) {
+        state.aiDone = true;
+      }
 
       setRaceTension(state);
-      raceScore.innerHTML = raceScoreHtml(state, "Race in progress...");
+      const message = raceProgressMessage(state);
+      raceScore.innerHTML = raceScoreHtml(state, message);
 
-      if (state.aiSuccess || state.kidSuccess || (step.maxStepsReached && !state.kidSuccess)) {
-        finishRaceRound(state);
+      if (state.aiDone) {
+        if (state.kidDone) {
+          finishRaceRound(state);
+        } else {
+          setStatus(message);
+        }
         return;
       }
 
@@ -2135,6 +2200,10 @@ async function main(): Promise<void> {
     if (editor.isEnabled()) {
       setStatus("Finish editing first. Save Edited Maze (or stop editing) before race.");
       setAppMode("LAB");
+      return;
+    }
+
+    if (!applySelectedChallengeMaze(false)) {
       return;
     }
 
@@ -2174,6 +2243,8 @@ async function main(): Promise<void> {
       aiBumps: 0,
       kidSuccess: false,
       aiSuccess: false,
+      kidDone: false,
+      aiDone: false,
       kidFinishTimeMs: null,
       aiFinishTimeMs: null,
       round: 1,
@@ -2193,7 +2264,7 @@ async function main(): Promise<void> {
 
   function onKidAction(action: Action): void {
     const state = raceState;
-    if (!state || !state.active) return;
+    if (!state || !state.active || state.kidDone) return;
 
     const step = state.kidEnv.step(action);
     state.kidSteps = step.stepCount;
@@ -2213,16 +2284,22 @@ async function main(): Promise<void> {
       threeViewer.stepTransition(step, speed);
     }
 
-    if (step.success) {
+    if (step.success && !state.kidSuccess) {
       state.kidSuccess = true;
       state.kidFinishTimeMs = performance.now() - state.startAt;
     }
+    if (step.success || step.maxStepsReached) {
+      state.kidDone = true;
+    }
 
     setRaceTension(state);
-    raceScore.innerHTML = raceScoreHtml(state, "Race in progress...");
+    const message = raceProgressMessage(state);
+    raceScore.innerHTML = raceScoreHtml(state, message);
 
-    if (state.kidSuccess || state.aiSuccess || (step.maxStepsReached && !state.aiSuccess)) {
+    if (state.kidDone && state.aiDone) {
       finishRaceRound(state);
+    } else if (state.kidDone) {
+      setStatus(message);
     }
   }
 
@@ -2271,27 +2348,7 @@ async function main(): Promise<void> {
   };
 
   raceMissionSelect.onchange = () => {
-    if (raceMissionSelect.value === CHALLENGE_MAZE_CURRENT) {
-      currentLevelId = null;
-      updateRaceButtonState();
-      setStatus(`Challenge maze set to current maze: ${currentMaze.name}.`);
-      return;
-    }
-
-    const missionId = Number(raceMissionSelect.value);
-    const level = LEVELS.find((item) => item.id === missionId);
-    if (!level || !progression.isUnlocked(missionId)) {
-      refreshChallengeMazeOptions();
-      setStatus("That mission is locked. Clear earlier missions first.");
-      return;
-    }
-
-    currentLevelId = missionId;
-    editor.setEnabled(false);
-    topRenderer.setEditorEnabled(false);
-    controls.editToggle.textContent = "Edit Maze";
-    applyMaze(loadLevel(missionId));
-    setStatus(`Challenge maze set to Mission ${missionId}: ${level.maze.name}.`);
+    applySelectedChallengeMaze(true);
   };
 
   // Legacy tab events removed
@@ -2381,6 +2438,10 @@ async function main(): Promise<void> {
       void sound.resume().then(() => sound.startAmbient());
     }
     setStatus(controls.soundToggle.checked ? "Sound enabled." : "Sound muted.");
+  };
+
+  controls.speedSelect.onchange = () => {
+    updateTurboBadge();
   };
 
   controls.runDemoBtn.onclick = () => {

@@ -54,7 +54,9 @@ export class Dashboard {
       `<li><strong>Move</strong> = how many moves it has made in this try.</li>`,
       `<li><strong>Points now</strong> = points from this one move.</li>`,
       `<li><strong>Total points this try</strong> = running total for this try.</li>`,
+      `<li><strong>Robot mode</strong> = Explore (try new move) or Exploit (use best known move).</li>`,
       `<li><strong>Win rate (last 10)</strong> = how often it reached the goal in the last 10 completed tries.</li>`,
+      `<li><strong>Last 10</strong> = only the most recent 10 tries, not all tries ever.</li>`,
       `<li><strong>AI guess scores (F/L/R)</strong> = how good forward/left/right looks right now (bigger is better).</li>`,
       `<li><strong>Note:</strong> Dashboard points are shown in easy scale (reward x 100). This does not change learning.</li>`,
       `</ul>`,
@@ -162,5 +164,11 @@ export class Dashboard {
     this.returnChart.data.labels?.push(String(episode));
     (this.returnChart.data.datasets[0].data as number[]).push(toDisplayPoints(episodeReturn));
     this.returnChart.update();
+  }
+
+  hasData(): boolean {
+    const labels = this.returnChart.data.labels ?? [];
+    const points = this.returnChart.data.datasets[0]?.data ?? [];
+    return this.metricsList.children.length > 0 || labels.length > 0 || points.length > 0;
   }
 }

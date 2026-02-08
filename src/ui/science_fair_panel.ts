@@ -206,6 +206,7 @@ export class ScienceFairPanel {
   private step4Mode: 'setup' | 'running' | 'debrief' = 'setup';
   private runContainer!: HTMLElement;
   private debriefContainer!: HTMLElement;
+  private wizardContent!: HTMLDivElement;
   private missionStatus!: HTMLParagraphElement;
   private debriefExperts!: HTMLElement;
   private arcadeXpLabel!: HTMLSpanElement;
@@ -266,10 +267,10 @@ export class ScienceFairPanel {
 
   private initInputs() {
     // --- Step 3 Setup Inputs ---
-    this.scienceEpisodesInput = this.createInput("number", "50");
+    this.scienceEpisodesInput = this.createInput("number", "15");
     this.scienceEpisodesInput.min = "1";
     this.scienceEpisodesInput.max = "500";
-    this.scienceTrialsInput = this.createInput("number", "1");
+    this.scienceTrialsInput = this.createInput("number", "3");
     this.scienceTrialsInput.min = "1";
     this.scienceTrialsInput.max = "20";
 
@@ -409,6 +410,7 @@ export class ScienceFairPanel {
     // 3. Wizard Content Area
     const contentArea = document.createElement("div");
     contentArea.className = "wizard-content";
+    this.wizardContent = contentArea;
     this.root.append(contentArea);
 
     // --- Build Steps ---
@@ -492,6 +494,7 @@ export class ScienceFairPanel {
     `;
 
     const abortBtn = document.createElement("button");
+    abortBtn.type = "button";
     abortBtn.className = "btn-secondary-action btn-mission-abort";
     abortBtn.textContent = "🛑 Abort Mission";
     abortBtn.onclick = () => this.cancelPendingEpisodeObservation();
@@ -584,7 +587,9 @@ export class ScienceFairPanel {
     const returnTitle = document.createElement("h4");
     returnTitle.textContent = "Learning Trend (Return)";
     returnTitle.append(
-      this.createHelpIcon("Return is total score for the episode. Higher return usually means better choices.")
+      this.createHelpIcon(
+        "Return is total reward for an episode. Higher is better. If values are negative, the one closer to zero is better."
+      )
     );
     this.returnCanvas = document.createElement("canvas");
     returnChartContainer.append(returnTitle, this.returnCanvas);
@@ -640,6 +645,7 @@ export class ScienceFairPanel {
 
     // Save Button
     this.overlaySaveBtn = document.createElement("button");
+    this.overlaySaveBtn.type = "button";
     this.overlaySaveBtn.className = "btn-primary-action btn-submit-debrief";
     this.overlaySaveBtn.innerHTML = "💾 Save Analysis & Resume Mission →";
     this.overlaySaveBtn.onclick = () => this.submitCheckpoint();
@@ -687,6 +693,7 @@ export class ScienceFairPanel {
     );
 
     this.finishBtn = document.createElement("button");
+    this.finishBtn.type = "button";
     this.finishBtn.textContent = "🖨️ Print Final Report";
     this.finishBtn.className = "btn-primary-action btn-finish";
     this.finishBtn.onclick = () => this.printProject();
@@ -712,16 +719,45 @@ export class ScienceFairPanel {
     navFooter.className = "wizard-footer";
 
     this.prevBtn = document.createElement("button");
+    this.prevBtn.type = "button";
     this.prevBtn.textContent = "← Back";
     this.prevBtn.onclick = () => this.goToStep(this.currentStep - 1);
 
     this.nextBtn = document.createElement("button");
+    this.nextBtn.type = "button";
     this.nextBtn.textContent = "Next Step →";
     this.nextBtn.className = "btn-primary-action";
     this.nextBtn.onclick = () => this.goToStep(this.currentStep + 1);
 
     navFooter.append(this.prevBtn, this.nextBtn);
     this.root.append(navFooter);
+
+    this.installMissionScrollGuard();
+  }
+
+  private installMissionScrollGuard(): void {
+    const preserveMissionScroll = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (!target.closest(".mission-layout")) return;
+      if (!this.wizardContent) return;
+
+      const panelTop = this.wizardContent.scrollTop;
+      const panelLeft = this.wizardContent.scrollLeft;
+      const pageTop = window.scrollY;
+      const pageLeft = window.scrollX;
+
+      requestAnimationFrame(() => {
+        this.wizardContent.scrollTop = panelTop;
+        this.wizardContent.scrollLeft = panelLeft;
+        if (window.scrollY !== pageTop || window.scrollX !== pageLeft) {
+          window.scrollTo(pageLeft, pageTop);
+        }
+      });
+    };
+
+    this.root.addEventListener("click", preserveMissionScroll, true);
+    this.root.addEventListener("change", preserveMissionScroll, true);
   }
 
   private createStep(_title: string): HTMLElement {
@@ -907,7 +943,9 @@ export class ScienceFairPanel {
         `LAST 10: WIN RATE ${trend ? `${trend.success.toFixed(0)}%` : "--"} `,
         this.createHelpIcon("Win rate is how often the bot reaches the goal in the last 10 episodes."),
         ` | RETURN SCORE ${trend ? trend.avgReturn.toFixed(1) : "--"} `,
-        this.createHelpIcon("Return score is the average total score in the last 10 episodes."),
+        this.createHelpIcon(
+          "Return score is average total reward over the last 10 episodes. Higher is better (example: -1.8 is better than -2.7)."
+        ),
         ` | STEPS TREND ${trend ? this.trendLabel(trend.stepsTrend) : "--"} `,
         this.createHelpIcon("Steps trend: improving means fewer steps over time.")
       );
@@ -931,11 +969,13 @@ export class ScienceFairPanel {
     controls.className = "data-log-wizard-controls";
 
     const prevBtn = document.createElement("button");
+    prevBtn.type = "button";
     prevBtn.className = "wizard-nav-btn";
     prevBtn.textContent = "← Prev Agent";
     prevBtn.disabled = true;
 
     const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
     nextBtn.className = "wizard-nav-btn";
     nextBtn.textContent = "Next Agent →";
     nextBtn.disabled = allCards.length <= 1;
@@ -1101,7 +1141,7 @@ export class ScienceFairPanel {
       "SCORE (Return)",
       "number",
       s.episodeReturn.toFixed(1),
-      "Return score is the total reward for this episode."
+      "Return score is the total reward for this episode. Higher is better; less negative is better."
     );
 
     // For Win/Loss, let's use a dropdown or simple text? Text "YES"/"NO" is fun.
@@ -1504,6 +1544,7 @@ export class ScienceFairPanel {
       content.innerHTML = entry.note.replace(/\n/g, "<br>");
 
       const delBtn = document.createElement("button");
+      delBtn.type = "button";
       delBtn.className = "entry-delete";
       delBtn.textContent = "×";
       delBtn.onclick = () => this.removeJournalEntry(entry.id);

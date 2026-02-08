@@ -19,6 +19,7 @@ export interface ControlsRefs {
   resetBtn: HTMLButtonElement;
   threeToggle: HTMLInputElement;
   soundToggle: HTMLInputElement;
+  turboBadge: HTMLSpanElement;
   statusLine: HTMLElement;
 }
 
@@ -128,6 +129,10 @@ export function createControls(mazes: MazeLayout[]): ControlsRefs {
   const statusLine = document.createElement("p");
   statusLine.className = "status-line";
   statusLine.textContent = "Ready.";
+  const turboBadge = document.createElement("span");
+  turboBadge.className = "controls-turbo-badge";
+  turboBadge.textContent = "Turbo Active";
+  turboBadge.setAttribute("aria-live", "polite");
 
   /* --- Inputs & Toggles --- */
   const fields: Array<{ label: string; hint: string; el: HTMLElement }> = [
@@ -210,7 +215,7 @@ export function createControls(mazes: MazeLayout[]): ControlsRefs {
   statusLine.textContent = "Ready.";
   statusLine.classList.add("controls-status");
 
-  root.append(heading, fieldWrap, toggles, buttons, runDemoBtn, statusLine);
+  root.append(heading, fieldWrap, toggles, buttons, runDemoBtn, turboBadge, statusLine);
 
   return {
     root,
@@ -228,6 +233,7 @@ export function createControls(mazes: MazeLayout[]): ControlsRefs {
     resetBtn,
     threeToggle,
     soundToggle,
+    turboBadge,
     statusLine,
   };
 }

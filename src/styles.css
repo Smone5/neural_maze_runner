@@ -545,6 +545,27 @@ button:disabled {
   text-align: center;
 }
 
+.controls-turbo-badge {
+  display: none;
+  align-self: center;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 204, 0, 0.65);
+  background: rgba(255, 204, 0, 0.14);
+  color: #ffe08a;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.controls-turbo-badge.active {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .mode-explain {
   margin-top: 8px;
   /* Reduced margin */
@@ -697,39 +718,80 @@ button:disabled {
   max-height: 190px;
 }
 
-.dashboard-panel.dashboard-compact .explain-box {
-  margin-top: 8px;
-  padding: 8px 10px;
-  font-size: 0.9rem;
+.dashboard-panel {
+  border: 2px solid red !important;
+  /* DEBUG */
+}
+
+.dashboard-panel h2 {
+  border: 1px solid blue !important;
+  /* DEBUG */
 }
 
 .dashboard-kid-guide {
+  border: 1px solid green !important;
+  /* DEBUG */
+}
+
+.metrics-list {
+  border: 1px solid yellow !important;
+  /* DEBUG */
+}
+
+.dashboard-kid-guide {
+  display: block;
   margin: 0 0 8px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border: 1px solid rgba(0, 212, 255, 0.25);
   border-radius: 10px;
   background: rgba(0, 212, 255, 0.08);
   color: #d9f3ff;
   font-size: 0.88rem;
+  transition: all 0.3s ease;
 }
 
-.dashboard-kid-guide p {
-  margin: 0 0 4px;
+.dashboard-kid-guide summary {
+  cursor: pointer;
+  outline: none;
+  font-weight: bold;
   color: #b9ecff;
+  list-style: none;
+  /* Hide default arrow */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Custom Arrow */
+.dashboard-kid-guide summary::before {
+  content: "▶";
+  font-size: 0.75rem;
+  transition: transform 0.2s ease;
+  color: var(--accent-2);
+}
+
+.dashboard-kid-guide[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.dashboard-kid-guide summary::-webkit-details-marker {
+  display: none;
+}
+
+.dashboard-kid-guide[open] {
+  padding-bottom: 12px;
 }
 
 .dashboard-kid-guide ul {
-  margin: 0;
-  padding-left: 18px;
+  margin: 10px 0 0;
+  padding-left: 20px;
 }
 
 .dashboard-kid-guide li {
-  margin: 2px 0;
+  margin: 4px 0;
+  line-height: 1.4;
 }
 
-.dashboard-panel:not(.dashboard-compact) .dashboard-kid-guide {
-  display: none;
-}
 
 .help-panel ol {
   margin: 10px 0 0;
@@ -2598,7 +2660,6 @@ button:disabled {
 
 .btn-start-lesson,
 .btn-check-lesson,
-.btn-run-guided,
 .btn-close-lesson {
   width: 100%;
   padding: 10px;
@@ -2616,11 +2677,6 @@ button:disabled {
 .btn-check-lesson {
   background: rgba(255, 203, 99, 0.2);
   border-color: rgba(255, 203, 99, 0.5);
-}
-
-.btn-run-guided {
-  background: rgba(144, 255, 143, 0.16);
-  border-color: rgba(144, 255, 143, 0.45);
 }
 
 .btn-close-lesson {
@@ -3254,9 +3310,6 @@ button:disabled {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.cockpit-dashboard .dashboard-panel.dashboard-compact .dashboard-kid-guide {
-  display: block;
-}
 
 .cockpit-view-3d,
 .cockpit-view-2d {
@@ -4697,7 +4750,8 @@ textarea:focus-visible,
 
 /* Evidence Panel */
 .evidence-list {
-  flex: 1;
+  flex: 0 0 auto;
+  max-height: min(38vh, 320px);
   overflow-y: auto;
   list-style: none;
   padding: 0;
@@ -5564,4 +5618,56 @@ select.data-entry-input {
   .experiment-live-card {
     min-width: 0;
   }
+}
+
+/* --- Onboarding & Guide Enhancements --- */
+.mission-guide-box {
+  background: rgba(0, 212, 255, 0.05);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 15px 0;
+  text-align: left;
+  animation: fadeIn 0.5s ease-out;
+}
+
+.mission-guide-box h4 {
+  margin: 0 0 10px;
+  color: var(--accent-2);
+  font-size: 1rem;
+}
+
+.mission-guide-box ol {
+  margin: 0;
+  padding-left: 20px;
+  color: #d2e5f3;
+}
+
+.mission-guide-box li {
+  margin-bottom: 8px;
+  font-size: 0.95rem;
+}
+
+.mission-guide-box li strong {
+  color: #fff;
+}
+
+@keyframes btnPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.4);
+  }
+
+  70% {
+    box-shadow: 0 0 0 15px rgba(0, 212, 255, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 212, 255, 0);
+  }
+}
+
+.btn-primary-action.guide-pulse {
+  animation: btnPulse 2s infinite;
+  border-color: var(--accent-2) !important;
+  transform: scale(1.05);
 }
