@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#06142f"/>
+      <stop offset="1" stop-color="#142646"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="7" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="960" height="540" rx="24" fill="url(#bg)"/>
+
+  <!-- Q-table grid -->
+  <g transform="translate(120 110)" filter="url(#glow)">
+    <rect x="0" y="0" width="720" height="340" rx="18" fill="rgba(0,0,0,0.18)" stroke="rgba(0,212,255,0.28)" stroke-width="6"/>
+    <g stroke="rgba(255,255,255,0.10)" stroke-width="2">
+      <path d="M0 85H720"/>
+      <path d="M0 170H720"/>
+      <path d="M0 255H720"/>
+      <path d="M180 0V340"/>
+      <path d="M360 0V340"/>
+      <path d="M540 0V340"/>
+    </g>
+    <g font-family="ui-sans-serif, system-ui, -apple-system" font-size="18" fill="#cfe7f7" opacity="0.9">
+      <text x="22" y="32" font-weight="800">State</text>
+      <text x="210" y="32" font-weight="800">Forward</text>
+      <text x="390" y="32" font-weight="800">Left</text>
+      <text x="585" y="32" font-weight="800">Right</text>
+    </g>
+
+    <!-- Bars -->
+    <g>
+      <rect x="210" y="110" width="140" height="22" rx="10" fill="rgba(0,212,255,0.18)" stroke="rgba(0,212,255,0.45)" stroke-width="3"/>
+      <rect x="390" y="110" width="70" height="22" rx="10" fill="rgba(255,216,79,0.18)" stroke="rgba(255,216,79,0.45)" stroke-width="3"/>
+      <rect x="585" y="110" width="110" height="22" rx="10" fill="rgba(255,107,107,0.18)" stroke="rgba(255,107,107,0.45)" stroke-width="3"/>
+
+      <rect x="210" y="195" width="60" height="22" rx="10" fill="rgba(0,212,255,0.18)" stroke="rgba(0,212,255,0.45)" stroke-width="3"/>
+      <rect x="390" y="195" width="150" height="22" rx="10" fill="rgba(255,216,79,0.18)" stroke="rgba(255,216,79,0.45)" stroke-width="3"/>
+      <rect x="585" y="195" width="80" height="22" rx="10" fill="rgba(255,107,107,0.18)" stroke="rgba(255,107,107,0.45)" stroke-width="3"/>
+
+      <rect x="210" y="280" width="120" height="22" rx="10" fill="rgba(0,212,255,0.18)" stroke="rgba(0,212,255,0.45)" stroke-width="3"/>
+      <rect x="390" y="280" width="95" height="22" rx="10" fill="rgba(255,216,79,0.18)" stroke="rgba(255,216,79,0.45)" stroke-width="3"/>
+      <rect x="585" y="280" width="40" height="22" rx="10" fill="rgba(255,107,107,0.18)" stroke="rgba(255,107,107,0.45)" stroke-width="3"/>
+    </g>
+  </g>
+
+  <!-- Caption -->
+  <text x="480" y="515" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system" font-size="18" fill="#cfe7f7" opacity="0.9">
+    A Q-table stores scores for actions in each situation (state).
+  </text>
+</svg>
+

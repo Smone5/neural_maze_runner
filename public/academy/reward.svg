@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#06142f"/>
+      <stop offset="1" stop-color="#102a5a"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe28a"/>
+      <stop offset="1" stop-color="#ffb300"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feColorMatrix in="b" type="matrix"
+        values="1 0 0 0 0
+                0 1 0 0 0
+                0 0 1 0 0
+                0 0 0 0.7 0" result="g"/>
+      <feMerge>
+        <feMergeNode in="g"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="960" height="540" rx="24" fill="url(#bg)"/>
+
+  <!-- Subtle grid -->
+  <g opacity="0.18" stroke="#5bdcff" stroke-width="1">
+    <path d="M60 100H900"/>
+    <path d="M60 160H900"/>
+    <path d="M60 220H900"/>
+    <path d="M60 280H900"/>
+    <path d="M60 340H900"/>
+    <path d="M60 400H900"/>
+    <path d="M180 70V470"/>
+    <path d="M300 70V470"/>
+    <path d="M420 70V470"/>
+    <path d="M540 70V470"/>
+    <path d="M660 70V470"/>
+    <path d="M780 70V470"/>
+  </g>
+
+  <!-- Trophy -->
+  <g filter="url(#glow)">
+    <path d="M380 150h200v72c0 70-45 122-100 122s-100-52-100-122v-72z" fill="url(#gold)" stroke="#ffd54a" stroke-width="6"/>
+    <path d="M355 170h40c0 54-18 92-55 112-22 12-44 12-58 8 14-14 22-36 22-62 0-46 23-58 51-58z"
+      fill="none" stroke="#ffd54a" stroke-width="10" stroke-linecap="round"/>
+    <path d="M605 170h40c28 0 51 12 51 58 0 26 8 48 22 62-14 4-36 4-58-8-37-20-55-58-55-112z"
+      fill="none" stroke="#ffd54a" stroke-width="10" stroke-linecap="round"/>
+    <rect x="445" y="344" width="70" height="48" rx="10" fill="#ffcc4a" stroke="#ffd54a" stroke-width="6"/>
+    <path d="M400 392h160v54c0 18-14 32-32 32H432c-18 0-32-14-32-32v-54z" fill="#162a57" stroke="#5bdcff" stroke-width="6"/>
+  </g>
+
+  <!-- Star reward -->
+  <g transform="translate(120 120)" filter="url(#glow)">
+    <path d="M90 10l18 55h58l-47 34 18 55-47-34-47 34 18-55-47-34h58z" fill="#ffe28a" stroke="#ffd54a" stroke-width="6"/>
+    <circle cx="90" cy="92" r="10" fill="#06142f"/>
+  </g>
+
+  <!-- Points +1 -->
+  <g transform="translate(680 110)" filter="url(#glow)">
+    <rect x="0" y="0" width="190" height="68" rx="16" fill="rgba(0,212,255,0.14)" stroke="rgba(0,212,255,0.55)" stroke-width="4"/>
+    <text x="95" y="46" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system" font-size="34" font-weight="800" fill="#bdf4ff">+1 Reward</text>
+  </g>
+
+  <!-- Caption hint -->
+  <text x="480" y="515" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system" font-size="18" fill="#cfe7f7" opacity="0.9">
+    Rewards are points that teach the AI what to do more often.
+  </text>
+</svg>
+

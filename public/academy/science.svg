@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#06142f"/>
+      <stop offset="1" stop-color="#0d2f2a"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="7" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="960" height="540" rx="24" fill="url(#bg)"/>
+
+  <!-- Beaker -->
+  <g transform="translate(220 95)" filter="url(#glow)">
+    <path d="M140 20v110l110 190c10 18-2 40-22 40H52c-20 0-32-22-22-40L140 130V20"
+      fill="rgba(255,255,255,0.04)" stroke="rgba(0,212,255,0.55)" stroke-width="8" stroke-linejoin="round"/>
+    <path d="M82 250h176" stroke="rgba(0,212,255,0.35)" stroke-width="8" stroke-linecap="round"/>
+    <path d="M62 285c20-22 46-22 66 0s46 22 66 0 46-22 66 0"
+      fill="none" stroke="#5bdcff" stroke-width="10" stroke-linecap="round"/>
+    <circle cx="105" cy="315" r="10" fill="#5bdcff"/>
+    <circle cx="175" cy="295" r="9" fill="#5bdcff" opacity="0.9"/>
+    <circle cx="215" cy="322" r="7" fill="#5bdcff" opacity="0.8"/>
+  </g>
+
+  <!-- Chart -->
+  <g transform="translate(520 140)" filter="url(#glow)">
+    <rect x="0" y="0" width="340" height="280" rx="18" fill="rgba(0,0,0,0.18)" stroke="rgba(255,255,255,0.12)" stroke-width="6"/>
+    <path d="M40 240H300" stroke="rgba(255,255,255,0.22)" stroke-width="6" stroke-linecap="round"/>
+    <path d="M40 240V40" stroke="rgba(255,255,255,0.22)" stroke-width="6" stroke-linecap="round"/>
+    <path d="M55 210L120 170L170 190L230 120L290 90" fill="none" stroke="#9dffc9" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="55" cy="210" r="7" fill="#9dffc9"/>
+    <circle cx="120" cy="170" r="7" fill="#9dffc9"/>
+    <circle cx="170" cy="190" r="7" fill="#9dffc9"/>
+    <circle cx="230" cy="120" r="7" fill="#9dffc9"/>
+    <circle cx="290" cy="90" r="7" fill="#9dffc9"/>
+    <text x="170" y="34" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system" font-size="18" font-weight="800" fill="#cfe7f7">Fair Comparison</text>
+  </g>
+
+  <!-- Caption -->
+  <text x="480" y="515" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system" font-size="18" fill="#cfe7f7" opacity="0.9">
+    Science = change one thing, keep everything else the same, then compare charts.
+  </text>
+</svg>
+

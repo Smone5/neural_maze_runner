@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#06142f"/>
+      <stop offset="1" stop-color="#3b1530"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="7" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="960" height="540" rx="24" fill="url(#bg)"/>
+
+  <!-- Warning sign -->
+  <g transform="translate(250 260)" filter="url(#glow)">
+    <path d="M0-170L170 140H-170Z" fill="rgba(255,216,79,0.12)" stroke="#ffd54a" stroke-width="10" stroke-linejoin="round"/>
+    <path d="M0-95V35" stroke="#ffd54a" stroke-width="16" stroke-linecap="round"/>
+    <circle cx="0" cy="85" r="10" fill="#ffd54a"/>
+  </g>
+
+  <!-- Maze + dead end -->
+  <g transform="translate(520 130)" filter="url(#glow)">
+    <rect x="0" y="0" width="360" height="320" rx="18" fill="rgba(0,0,0,0.18)" stroke="rgba(0,212,255,0.28)" stroke-width="6"/>
+    <path d="M40 60h280M40 60v220M40 280h280M320 60v70M320 280v-60M120 60v120M200 140h120M200 140v140M120 260h160"
+      fill="none" stroke="#5bdcff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="90" cy="110" r="14" fill="#ff6b6b"/>
+    <rect x="290" y="250" width="34" height="34" rx="8" fill="#ffd54a"/>
+    <path d="M90 110h110v110h80" fill="none" stroke="#ff6b6b" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+  </g>
+
+  <!-- Caption -->
+  <text x="480" y="515" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system" font-size="18" fill="#cfe7f7" opacity="0.9">
+    Traps cause extra penalties (bumps, dead ends, wasted steps).
+  </text>
+</svg>
+
