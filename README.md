@@ -2,6 +2,20 @@
 
 A kid-friendly web reinforcement learning lab for science fairs. I made this quick one day for my son!
 
+## Screenshots
+
+| Landing Page | Progress Map |
+| :---: | :---: |
+| ![Landing Page](screenshots/landing.jpg) | ![Progress Map](screenshots/map.jpg) |
+
+| Interactive Lessons | Science Fair Wizard |
+| :---: | :---: |
+| ![Interactive Lessons](screenshots/lesson.jpg) | ![Science Fair Wizard](screenshots/science.jpg) |
+
+| Race vs AI (3D) |
+| :---: |
+| ![Race View](screenshots/race.jpg) |
+
 ## Stack
 - Vite + TypeScript
 - Canvas 2D renderer
