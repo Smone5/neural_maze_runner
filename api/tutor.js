@@ -6,19 +6,77 @@ function json(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+function normalizeList(values, max = 6) {
+  if (!Array.isArray(values)) return [];
+  return values.map((value) => String(value).trim()).filter(Boolean).slice(0, max);
+}
+
+function normalizeMissionContext(input) {
+  if (!Array.isArray(input)) return [];
+  return input.slice(0, 3).map((item) => ({
+    missionId: Number(item?.missionId ?? 0),
+    title: String(item?.title ?? "Mission"),
+    hook: String(item?.hook ?? ""),
+    intro: String(item?.intro ?? ""),
+    keyFacts: normalizeList(item?.keyFacts, 5),
+    watchFor: normalizeList(item?.watchFor, 5),
+    tryIt: normalizeList(item?.tryIt, 4),
+    vocabulary: normalizeList(item?.vocabulary, 10),
+  }));
+}
+
 function buildPrompt(input) {
   const conceptId = String(input?.conceptId ?? "reward");
   const conceptLabel = String(input?.conceptLabel ?? "Rewards");
   const confidencePercent = Number(input?.confidencePercent ?? 0);
   const age = Number(input?.age ?? 11);
+  const gradeLevel = Number(input?.gradeLevel ?? 5);
+  const attemptRaw = Number(input?.attempt ?? 1);
+  const attempt = Number.isFinite(attemptRaw) ? Math.min(5, Math.max(1, Math.trunc(attemptRaw))) : 1;
+  const recentQuestions = Array.isArray(input?.recentQuestions)
+    ? input.recentQuestions.map((v) => String(v).trim()).filter(Boolean).slice(-8)
+    : [];
+  const recentQuestionBlock = recentQuestions.length
+    ? [
+        "Do NOT repeat or lightly reword any of these recent questions:",
+        ...recentQuestions.map((q, i) => `${i + 1}. ${q}`),
+      ].join("\n")
+    : "No recent questions provided.";
+  const missionContext = normalizeMissionContext(input?.missionContext);
+  const missionContextBlock = missionContext.length
+    ? missionContext
+        .map((mission) => {
+          const lines = [
+            `Mission ${mission.missionId}: ${mission.title}`,
+            mission.hook ? `Hook: ${mission.hook}` : "",
+            mission.intro ? `Intro: ${mission.intro}` : "",
+            mission.keyFacts.length ? `Key facts: ${mission.keyFacts.join(" | ")}` : "",
+            mission.watchFor.length ? `Watch metrics: ${mission.watchFor.join(" | ")}` : "",
+            mission.tryIt.length ? `Try-it steps: ${mission.tryIt.join(" | ")}` : "",
+            mission.vocabulary.length ? `Vocabulary: ${mission.vocabulary.join(", ")}` : "",
+          ].filter(Boolean);
+          return lines.join("\n");
+        })
+        .join("\n\n")
+    : "Mission context unavailable. Stay aligned with reinforcement learning lessons for kids.";
 
   return {
     conceptId,
     system:
-      "You are a patient AI tutor for kids. Write for an 11-year-old. Keep text simple, accurate, and encouraging. Return ONLY valid JSON.",
+      "You are a patient AI tutor for kids. Write for a 5th grader (about age 10-11). Keep text simple, accurate, and encouraging. Return ONLY valid JSON.",
     user: [
       `Create a micro-lesson for concept: ${conceptLabel} (${conceptId}).`,
-      `Student confidence: ${confidencePercent}%. Student age: ${age}.`,
+      `Student confidence: ${confidencePercent}%. Student age: ${age}. Grade level: ${gradeLevel}.`,
+      `Attempt number: ${attempt}. Use a fresh angle and different wording each attempt.`,
+      recentQuestionBlock,
+      "Use ONLY the mission context below for facts and metric names.",
+      "Use short words and short sentences for 5th grade reading.",
+      "If you use a technical word (like reward, episode, explore, exploit, Q-table), define it simply in teachBlurb.",
+      "Question should be one sentence and easy to read aloud.",
+      "Include one mission metric or dashboard phrase when relevant (example: 'Win rate (last 10 completed tries)').",
+      "Do not mention APIs, code, tokens, or system internals.",
+      "Mission context:",
+      missionContextBlock,
       "Return JSON fields:",
       "- conceptId (string)",
       "- conceptLabel (string)",
@@ -28,6 +86,7 @@ function buildPrompt(input) {
       "- correctIndex (0..3)",
       "- hint (one short hint, no answer giveaway)",
       "Keep the question aligned with reinforcement learning in a maze game.",
+      "Make the question scenario and answer choices clearly different from recent questions.",
     ].join("\n"),
   };
 }
@@ -94,8 +153,20 @@ function parseTutorPack(text, fallbackConceptId) {
   if (!pack.question || pack.options.length !== 4) {
     throw new Error("AI response missing question/options.");
   }
+  if (pack.options.some((option) => !option.trim())) {
+    throw new Error("AI response has empty option text.");
+  }
+  const uniqueOptions = new Set(pack.options.map((option) => option.trim().toLowerCase()));
+  if (uniqueOptions.size !== 4) {
+    throw new Error("AI response options must be distinct.");
+  }
   if (!Number.isInteger(pack.correctIndex) || pack.correctIndex < 0 || pack.correctIndex > 3) {
     throw new Error("AI response has invalid correctIndex.");
+  }
+  const questionWords = pack.question.trim().split(/\s+/).length;
+  const teachWords = pack.teachBlurb.trim().split(/\s+/).length;
+  if (questionWords > 30 || teachWords > 90) {
+    throw new Error("AI response too long for 5th-grade tutor mode.");
   }
   if (!pack.teachBlurb) {
     pack.teachBlurb = "Let’s review this concept with a quick example and question.";

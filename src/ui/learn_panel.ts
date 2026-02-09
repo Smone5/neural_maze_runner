@@ -41,6 +41,17 @@ interface AiTutorQuestionPack {
   hint: string;
 }
 
+interface TutorMissionContext {
+  missionId: number;
+  title: string;
+  hook: string;
+  intro: string;
+  keyFacts: string[];
+  watchFor: string[];
+  tryIt: string[];
+  vocabulary: string[];
+}
+
 const LESSONS: Record<number, LessonContent> = {
   1: {
     title: "Mission 1 Lesson: Rewards",
@@ -395,6 +406,7 @@ export class LearnPanel {
   private reviewPrompt: CheckInPrompt | null = null;
   private reviewSelected: number | null = null;
   private reviewResult: CheckInResult | null = null;
+  private aiQuestionHistoryByConcept: Record<string, string[]> = {};
 
   private finalQuestions: QuizQuestion[] = [];
   private finalAnswers: Record<string, number> = {};
@@ -412,6 +424,8 @@ export class LearnPanel {
   private dashboard?: Dashboard;
 
   private static REWARD_KEY = "rl_school_rewards_v1";
+  private static AI_QUESTION_HISTORY_LIMIT = 8;
+  private static AI_REQUEST_ATTEMPTS = 2;
 
   constructor(
     progression: ProgressionManager,
@@ -683,7 +697,68 @@ export class LearnPanel {
     return card;
   }
 
-  private async requestAiTutorPack(prompt: CheckInPrompt): Promise<AiTutorQuestionPack> {
+  private normalizeAiQuestion(question: string): string {
+    return question
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  private getRecentAiQuestions(conceptId: string): string[] {
+    return [...(this.aiQuestionHistoryByConcept[conceptId] ?? [])];
+  }
+
+  private isRepeatedAiQuestion(conceptId: string, question: string, extraRecent: string[] = []): boolean {
+    const candidate = this.normalizeAiQuestion(question);
+    if (!candidate) return false;
+    const history = [
+      ...(this.aiQuestionHistoryByConcept[conceptId] ?? []),
+      ...extraRecent,
+    ];
+    return history.some((item) => this.normalizeAiQuestion(item) === candidate);
+  }
+
+  private rememberAiQuestion(conceptId: string, question: string): void {
+    const trimmed = question.trim();
+    if (!trimmed) return;
+    const normalized = this.normalizeAiQuestion(trimmed);
+    if (!normalized) return;
+    const previous = this.aiQuestionHistoryByConcept[conceptId] ?? [];
+    const deduped = previous.filter((item) => this.normalizeAiQuestion(item) !== normalized);
+    deduped.push(trimmed);
+    this.aiQuestionHistoryByConcept[conceptId] = deduped.slice(-LearnPanel.AI_QUESTION_HISTORY_LIMIT);
+  }
+
+  private buildTutorMissionContext(conceptId: string): TutorMissionContext[] {
+    const entries = Object.entries(LESSONS)
+      .map(([id, lesson]) => ({ missionId: Number(id), lesson }))
+      .filter(({ lesson }) => lesson.conceptIds.includes(conceptId));
+
+    const activeId = this.activeLessonId;
+    entries.sort((a, b) => {
+      if (activeId != null && a.missionId === activeId && b.missionId !== activeId) return -1;
+      if (activeId != null && b.missionId === activeId && a.missionId !== activeId) return 1;
+      return a.missionId - b.missionId;
+    });
+
+    return entries.slice(0, 3).map(({ missionId, lesson }) => ({
+      missionId,
+      title: lesson.title,
+      hook: lesson.hook,
+      intro: lesson.intro,
+      keyFacts: lesson.bullets.slice(0, 4),
+      watchFor: lesson.watchFor.slice(0, 3),
+      tryIt: lesson.tryIt.slice(0, 2),
+      vocabulary: lesson.keyWords.map((item) => item.term).slice(0, 8),
+    }));
+  }
+
+  private async requestAiTutorPack(
+    prompt: CheckInPrompt,
+    recentQuestions: string[] = [],
+    attempt = 1
+  ): Promise<AiTutorQuestionPack> {
     const response = await fetch("/api/tutor", {
       method: "POST",
       headers: {
@@ -694,6 +769,10 @@ export class LearnPanel {
         conceptLabel: prompt.conceptLabel,
         confidencePercent: prompt.confidencePercent,
         age: 11,
+        gradeLevel: 5,
+        attempt,
+        recentQuestions: recentQuestions.slice(-LearnPanel.AI_QUESTION_HISTORY_LIMIT),
+        missionContext: this.buildTutorMissionContext(prompt.conceptId),
       }),
     });
 
@@ -774,9 +853,28 @@ export class LearnPanel {
       hintVisible = false;
       renderBody();
       try {
-        aiPack = await this.requestAiTutorPack(this.reviewPrompt);
+        const conceptId = this.reviewPrompt.conceptId;
+        const blockedQuestions = this.getRecentAiQuestions(conceptId);
+        let nextPack: AiTutorQuestionPack | null = null;
+
+        for (let attempt = 1; attempt <= LearnPanel.AI_REQUEST_ATTEMPTS; attempt++) {
+          const candidate = await this.requestAiTutorPack(this.reviewPrompt, blockedQuestions, attempt);
+          if (this.isRepeatedAiQuestion(conceptId, candidate.question, blockedQuestions)) {
+            blockedQuestions.push(candidate.question);
+            continue;
+          }
+          nextPack = candidate;
+          break;
+        }
+
+        if (!nextPack) {
+          throw new Error("AI repeated a recent question. Try Next Challenge again.");
+        }
+
+        aiPack = nextPack;
         reviewMode = "ai";
         waitingForAiQuestion = false;
+        this.rememberAiQuestion(conceptId, nextPack.question);
       } catch (error) {
         aiPack = null;
         reviewMode = "local";

@@ -2,6 +2,34 @@ import { defineConfig, loadEnv } from "vite";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/responses";
 
+function normalizeList(values: unknown, max = 6): string[] {
+  if (!Array.isArray(values)) return [];
+  return values.map((value) => String(value).trim()).filter(Boolean).slice(0, max);
+}
+
+function normalizeMissionContext(input: unknown): Array<{
+  missionId: number;
+  title: string;
+  hook: string;
+  intro: string;
+  keyFacts: string[];
+  watchFor: string[];
+  tryIt: string[];
+  vocabulary: string[];
+}> {
+  if (!Array.isArray(input)) return [];
+  return input.slice(0, 3).map((item: any) => ({
+    missionId: Number(item?.missionId ?? 0),
+    title: String(item?.title ?? "Mission"),
+    hook: String(item?.hook ?? ""),
+    intro: String(item?.intro ?? ""),
+    keyFacts: normalizeList(item?.keyFacts, 5),
+    watchFor: normalizeList(item?.watchFor, 5),
+    tryIt: normalizeList(item?.tryIt, 4),
+    vocabulary: normalizeList(item?.vocabulary, 10),
+  }));
+}
+
 function extractResponseText(data: any): string {
   if (typeof data?.output_text === "string" && data.output_text.trim()) {
     return data.output_text;
@@ -89,12 +117,51 @@ export default defineConfig(({ mode }) => {
             const conceptLabel = String(input?.conceptLabel ?? "Rewards");
             const confidencePercent = Number(input?.confidencePercent ?? 0);
             const age = Number(input?.age ?? 11);
+            const gradeLevel = Number(input?.gradeLevel ?? 5);
+            const attemptRaw = Number(input?.attempt ?? 1);
+            const attempt = Number.isFinite(attemptRaw) ? Math.min(5, Math.max(1, Math.trunc(attemptRaw))) : 1;
+            const recentQuestions = Array.isArray(input?.recentQuestions)
+              ? input.recentQuestions.map((v: unknown) => String(v).trim()).filter(Boolean).slice(-8)
+              : [];
+            const recentQuestionBlock = recentQuestions.length
+              ? [
+                "Do NOT repeat or lightly reword any of these recent questions:",
+                ...recentQuestions.map((q: string, i: number) => `${i + 1}. ${q}`),
+              ].join("\n")
+              : "No recent questions provided.";
+            const missionContext = normalizeMissionContext(input?.missionContext);
+            const missionContextBlock = missionContext.length
+              ? missionContext
+                .map((mission) => {
+                  const lines = [
+                    `Mission ${mission.missionId}: ${mission.title}`,
+                    mission.hook ? `Hook: ${mission.hook}` : "",
+                    mission.intro ? `Intro: ${mission.intro}` : "",
+                    mission.keyFacts.length ? `Key facts: ${mission.keyFacts.join(" | ")}` : "",
+                    mission.watchFor.length ? `Watch metrics: ${mission.watchFor.join(" | ")}` : "",
+                    mission.tryIt.length ? `Try-it steps: ${mission.tryIt.join(" | ")}` : "",
+                    mission.vocabulary.length ? `Vocabulary: ${mission.vocabulary.join(", ")}` : "",
+                  ].filter(Boolean);
+                  return lines.join("\n");
+                })
+                .join("\n\n")
+              : "Mission context unavailable. Stay aligned with reinforcement learning lessons for kids.";
 
             const systemPrompt =
-              "You are a patient AI tutor for kids. Write for an 11-year-old. Keep text simple, accurate, and encouraging. Return ONLY valid JSON.";
+              "You are a patient AI tutor for kids. Write for a 5th grader (about age 10-11). Keep text simple, accurate, and encouraging. Return ONLY valid JSON.";
             const userPrompt = [
               `Create a micro-lesson for concept: ${conceptLabel} (${conceptId}).`,
-              `Student confidence: ${confidencePercent}%. Student age: ${age}.`,
+              `Student confidence: ${confidencePercent}%. Student age: ${age}. Grade level: ${gradeLevel}.`,
+              `Attempt number: ${attempt}. Use a fresh angle and different wording each attempt.`,
+              recentQuestionBlock,
+              "Use ONLY the mission context below for facts and metric names.",
+              "Use short words and short sentences for 5th grade reading.",
+              "If you use a technical word (like reward, episode, explore, exploit, Q-table), define it simply in teachBlurb.",
+              "Question should be one sentence and easy to read aloud.",
+              "Include one mission metric or dashboard phrase when relevant (example: 'Win rate (last 10 completed tries)').",
+              "Do not mention APIs, code, tokens, or system internals.",
+              "Mission context:",
+              missionContextBlock,
               "Return JSON fields:",
               "- conceptId (string)",
               "- conceptLabel (string)",
@@ -104,6 +171,7 @@ export default defineConfig(({ mode }) => {
               "- correctIndex (0..3)",
               "- hint (one short hint, no answer giveaway)",
               "Keep the question aligned with reinforcement learning in a maze game.",
+              "Make the question scenario and answer choices clearly different from recent questions.",
             ].join("\n");
 
             const openaiResp = await fetch(OPENAI_API_URL, {
@@ -156,6 +224,21 @@ export default defineConfig(({ mode }) => {
 
             if (!pack.question || pack.options.length !== 4 || !Number.isInteger(pack.correctIndex)) {
               sendJson(502, { ok: false, error: "AI response schema invalid." });
+              return;
+            }
+            if (pack.options.some((option: string) => !option.trim())) {
+              sendJson(502, { ok: false, error: "AI response schema invalid (empty option)." });
+              return;
+            }
+            const uniqueOptions = new Set(pack.options.map((option: string) => option.trim().toLowerCase()));
+            if (uniqueOptions.size !== 4) {
+              sendJson(502, { ok: false, error: "AI response schema invalid (duplicate options)." });
+              return;
+            }
+            const questionWords = pack.question.trim().split(/\s+/).length;
+            const teachWords = pack.teachBlurb.trim().split(/\s+/).length;
+            if (questionWords > 30 || teachWords > 90) {
+              sendJson(502, { ok: false, error: "AI response too long for 5th-grade tutor mode." });
               return;
             }
 
