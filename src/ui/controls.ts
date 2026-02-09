@@ -8,6 +8,7 @@ export interface ControlsRefs {
   mazeSelect: HTMLSelectElement;
   editToggle: HTMLButtonElement;
   algorithmSelect: HTMLSelectElement;
+  compareSelect: HTMLSelectElement;
   episodesInput: HTMLInputElement;
   trialsInput: HTMLInputElement;
   speedSelect: HTMLSelectElement;
@@ -22,6 +23,76 @@ export interface ControlsRefs {
   turboBadge: HTMLSpanElement;
   statusLine: HTMLElement;
 }
+
+interface KidGuideEntry {
+  algorithm: AlgorithmType;
+  nickname: string;
+  whatItDoes: string;
+  goodFor: string;
+  watchOutFor: string;
+}
+
+const ALGORITHM_OPTIONS: AlgorithmType[] = [
+  "Random",
+  "Q-learning",
+  "SARSA",
+  "Expected SARSA",
+  "Double Q-learning",
+  "Dyna-Q",
+  "PPO (Tabular)",
+];
+
+const KID_ALGO_GUIDE: KidGuideEntry[] = [
+  {
+    algorithm: "Random",
+    nickname: "The Wild Explorer",
+    whatItDoes: "Bravely tries anything! It doesn't use a map, but sometimes wild guesses lead to great discoveries.",
+    goodFor: "Finding surprises. If your specialized AI beats this explorer, you know it's truly learning!",
+    watchOutFor: "It gets lost easily and takes the long way home.",
+  },
+  {
+    algorithm: "Q-learning",
+    nickname: "The Treasure Hunter",
+    whatItDoes: "Builds a legendary treasure map! It remembers exactly where the biggest rewards are and rushes to the gold.",
+    goodFor: "A fast learner that loves high scores. Great for solving mazes quickly.",
+    watchOutFor: "Can get over-excited by one lucky win and ignore safer paths.",
+  },
+  {
+    algorithm: "SARSA",
+    nickname: "The Careful Adventurer",
+    whatItDoes: "Learns by doing, but watches its step! It learns from the path it *actually* takes, keeping safe from traps.",
+    goodFor: "Exploring dangerous places without getting hurt. Safety first!",
+    watchOutFor: "Might learn a bit slower because it worries about risks.",
+  },
+  {
+    algorithm: "Expected SARSA",
+    nickname: "The Master Strategist",
+    whatItDoes: "Thinks ahead! Instead of just reacting, it calculates the average result of all possible future moves. Big brain energy.",
+    goodFor: "Smooth, smart learning. It doesn't panic when things get noisy or random.",
+    watchOutFor: "Takes time to think. Needs practice to show its true genius.",
+  },
+  {
+    algorithm: "Double Q-learning",
+    nickname: "The Double-Check Detective",
+    whatItDoes: "Uses two brains instead of one! It double-checks every clue to make sure it's not being tricked by a lucky win.",
+    goodFor: "Avoiding 'fake news' rewards. Very honest about how good a move really is.",
+    watchOutFor: "Needs to write down twice as many notes, so it starts a little slower.",
+  },
+  {
+    algorithm: "Dyna-Q",
+    nickname: "The Dreamer",
+    whatItDoes: "Learns while awake AND while sleeping! It practices moves in its imagination to get smarter even when it's not moving.",
+    goodFor: "Learning super fast! It solves puzzles in its head before trying them.",
+    watchOutFor: "If it imagines the wrong thing, it might make silly mistakes.",
+  },
+  {
+    algorithm: "PPO (Tabular)",
+    nickname: "The Steady Climber",
+    whatItDoes: "Improves step-by-step! It never rushes, making sure every new skill is solid before moving to the next level.",
+    goodFor: "Tough challenges where one bad move ruins everything. Slow and steady wins the race.",
+    watchOutFor: "Needs a lot of practice sessions to reach the top of the mountain.",
+  },
+];
 
 export function createControls(mazes: MazeLayout[]): ControlsRefs {
   const hint = (text: string): HTMLSpanElement => {
@@ -57,13 +128,26 @@ export function createControls(mazes: MazeLayout[]): ControlsRefs {
   editToggle.className = "btn-edit ctrl-edit-toggle";
 
   const algorithmSelect = document.createElement("select");
-  ["Random", "Q-learning", "SARSA", "Expected SARSA", "Double Q-learning", "All"].forEach((alg) => {
+  ALGORITHM_OPTIONS.forEach((alg) => {
     const option = document.createElement("option");
     option.value = alg;
     option.textContent = alg;
     algorithmSelect.appendChild(option);
   });
   algorithmSelect.value = "Q-learning";
+
+  const compareSelect = document.createElement("select");
+  const noneOption = document.createElement("option");
+  noneOption.value = "";
+  noneOption.textContent = "None (auto pick)";
+  compareSelect.appendChild(noneOption);
+  ALGORITHM_OPTIONS.forEach((alg) => {
+    const option = document.createElement("option");
+    option.value = alg;
+    option.textContent = alg;
+    compareSelect.appendChild(option);
+  });
+  compareSelect.value = "";
 
   const episodesInput = document.createElement("input");
   episodesInput.type = "number";
@@ -96,7 +180,7 @@ export function createControls(mazes: MazeLayout[]): ControlsRefs {
   /* --- Secondary Actions --- */
   const runExperimentBtn = document.createElement("button");
   runExperimentBtn.textContent = "Science Test";
-  runExperimentBtn.title = "Science mode: all algorithms train in fair trials, then create charts and CSV.";
+  runExperimentBtn.title = "Science mode: compare selected algorithms with fair trials, charts, and CSV.";
   runExperimentBtn.className = "btn-experiment btn-secondary-action";
 
   const raceBtn = document.createElement("button");
@@ -136,11 +220,21 @@ export function createControls(mazes: MazeLayout[]): ControlsRefs {
 
   /* --- Inputs & Toggles --- */
   const fields: Array<{ label: string; hint: string; el: HTMLElement }> = [
-    { label: "Select Maze", hint: "Pick which maze map to use.", el: mazeSelect },
+    {
+      label: "Select Maze",
+      hint: "Pick which maze map to use. Obstacle maps use Ice (slides), Water/Fire (extra penalty), and Holes (run ends).",
+      el: mazeSelect,
+    },
     {
       label: "Algorithm",
-      hint: "Random means guessing. Q-learning, SARSA, Expected SARSA, and Double Q-learning all learn from points. All tests every algorithm.",
+      hint:
+        "Pick the main learner. Random means guessing. Others try to improve over time.",
       el: algorithmSelect,
+    },
+    {
+      label: "Compare To",
+      hint: "Optional second learner for quick 2-way graph comparison in Science Test.",
+      el: compareSelect,
     },
     {
       label: "Episodes",
@@ -153,6 +247,58 @@ export function createControls(mazes: MazeLayout[]): ControlsRefs {
 
   const fieldWrap = document.createElement("div");
   fieldWrap.className = "control-grid controls-params";
+
+  const guideDetails = document.createElement("details");
+  guideDetails.className = "rl-guide";
+  const guideSummary = document.createElement("summary");
+  guideSummary.textContent = "Meet Your AI Teammates";
+  const guideLead = document.createElement("p");
+  guideLead.className = "rl-guide-lead";
+  guideLead.textContent = "Pick a brain type to see its special powers and secret weaknesses.";
+  const guideGrid = document.createElement("div");
+  guideGrid.className = "rl-guide-grid";
+  const guideCards = new Map<string, HTMLElement>();
+
+  for (const entry of KID_ALGO_GUIDE) {
+    const card = document.createElement("article");
+    card.className = "rl-guide-card";
+    card.dataset.algorithm = entry.algorithm;
+
+    const title = document.createElement("h3");
+    title.textContent = entry.algorithm;
+
+    const nickname = document.createElement("p");
+    nickname.className = "rl-guide-nickname";
+    nickname.textContent = entry.nickname;
+
+    const what = document.createElement("p");
+    what.innerHTML = `<strong>How it learns:</strong> ${entry.whatItDoes}`;
+
+    const goodFor = document.createElement("p");
+    goodFor.innerHTML = `<strong>Good for:</strong> ${entry.goodFor}`;
+
+    const watchOut = document.createElement("p");
+    watchOut.innerHTML = `<strong>Watch out:</strong> ${entry.watchOutFor}`;
+
+    card.append(title, nickname, what, goodFor, watchOut);
+    guideGrid.append(card);
+    guideCards.set(entry.algorithm, card);
+  }
+
+  guideDetails.append(guideSummary, guideLead, guideGrid);
+
+  const syncGuideSelection = () => {
+    for (const [algorithm, card] of guideCards.entries()) {
+      card.classList.toggle("is-active", algorithm === algorithmSelect.value);
+    }
+  };
+  algorithmSelect.addEventListener("change", () => {
+    if (compareSelect.value === algorithmSelect.value) {
+      compareSelect.value = "";
+    }
+    syncGuideSelection();
+  });
+  syncGuideSelection();
 
   // Helper to add specific classes based on label
   const getClassFor = (label: string) => {
@@ -171,6 +317,24 @@ export function createControls(mazes: MazeLayout[]): ControlsRefs {
     span.textContent = `${field.label} `;
     span.append(hint(field.hint));
     label.append(span, field.el);
+    if (field.label === "Algorithm") {
+      const openGuideBtn = document.createElement("button");
+      openGuideBtn.type = "button";
+      openGuideBtn.className = "btn-guide-link";
+      openGuideBtn.textContent = "Open kid guide";
+      openGuideBtn.title = "Open the RL guide cards below.";
+      openGuideBtn.onclick = () => {
+        syncGuideSelection();
+        guideDetails.open = true;
+        const activeCard = guideCards.get(algorithmSelect.value);
+        activeCard?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      };
+
+      const helperRow = document.createElement("div");
+      helperRow.className = "field-help-row";
+      helperRow.append(openGuideBtn);
+      label.append(helperRow);
+    }
     fieldWrap.appendChild(label);
   }
 
@@ -215,13 +379,14 @@ export function createControls(mazes: MazeLayout[]): ControlsRefs {
   statusLine.textContent = "Ready.";
   statusLine.classList.add("controls-status");
 
-  root.append(heading, fieldWrap, toggles, buttons, runDemoBtn, turboBadge, statusLine);
+  root.append(heading, fieldWrap, guideDetails, toggles, buttons, runDemoBtn, turboBadge, statusLine);
 
   return {
     root,
     mazeSelect,
     editToggle,
     algorithmSelect,
+    compareSelect,
     episodesInput,
     trialsInput,
     speedSelect,
@@ -239,17 +404,8 @@ export function createControls(mazes: MazeLayout[]): ControlsRefs {
 }
 
 export function selectedAlgorithms(value: string): AlgorithmType[] {
-  if (value === "All") {
-    return ["Random", "Q-learning", "SARSA", "Expected SARSA", "Double Q-learning"];
-  }
-  if (
-    value === "Random" ||
-    value === "Q-learning" ||
-    value === "SARSA" ||
-    value === "Expected SARSA" ||
-    value === "Double Q-learning"
-  ) {
-    return [value];
+  if (ALGORITHM_OPTIONS.includes(value as AlgorithmType)) {
+    return [value as AlgorithmType];
   }
   return ["Q-learning"];
 }

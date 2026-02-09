@@ -633,6 +633,10 @@ export class LearnPanel {
       preset.algorithm = "Expected SARSA";
     } else if (text.includes("double q-learning")) {
       preset.algorithm = "Double Q-learning";
+    } else if (text.includes("dyna-q") || text.includes("dyna q")) {
+      preset.algorithm = "Dyna-Q";
+    } else if (text.includes("ppo")) {
+      preset.algorithm = "PPO (Tabular)";
     } else if (text.includes("try sarsa")) {
       preset.algorithm = "SARSA";
     } else if (text.includes("q-learning")) {

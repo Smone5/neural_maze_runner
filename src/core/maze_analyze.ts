@@ -1,4 +1,8 @@
-import { MazeAnalysis, MazeLayout, Point } from "./maze_types";
+import { MazeAnalysis, MazeChar, MazeLayout, Point } from "./maze_types";
+
+function isPathCell(cell: MazeChar): boolean {
+  return cell !== "#" && cell !== "H";
+}
 
 function neighbors(layout: MazeLayout, row: number, col: number): Point[] {
   const dirs = [
@@ -15,7 +19,7 @@ function neighbors(layout: MazeLayout, row: number, col: number): Point[] {
     if (nr < 0 || nr >= layout.size || nc < 0 || nc >= layout.size) {
       continue;
     }
-    if (layout.grid[nr][nc] !== "#") {
+    if (isPathCell(layout.grid[nr][nc])) {
       out.push({ row: nr, col: nc });
     }
   }
@@ -55,6 +59,10 @@ export function analyzeMaze(layout: MazeLayout): MazeAnalysis {
       const cell = layout.grid[r][c];
       if (cell === "#") {
         wallCount += 1;
+        continue;
+      }
+      if (cell === "H") {
+        floorCount += 1;
         continue;
       }
       floorCount += 1;

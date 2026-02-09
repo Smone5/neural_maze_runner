@@ -54,6 +54,8 @@ interface ScienceNotebookDraft {
   compareSarsa: boolean;
   compareExpectedSarsa: boolean;
   compareDoubleQ: boolean;
+  compareDynaQ: boolean;
+  comparePpo: boolean;
   topic1: string;
   topic2: string;
   sources: string;
@@ -150,6 +152,8 @@ export class ScienceFairPanel {
   public compareSarsaCheck!: HTMLInputElement;
   public compareExpectedSarsaCheck!: HTMLInputElement;
   public compareDoubleQCheck!: HTMLInputElement;
+  public compareDynaQCheck!: HTMLInputElement;
+  public comparePpoCheck!: HTMLInputElement;
 
   // Research
   private topic1Input!: HTMLTextAreaElement;
@@ -279,6 +283,8 @@ export class ScienceFairPanel {
     this.compareSarsaCheck = this.createCheckbox(true);
     this.compareExpectedSarsaCheck = this.createCheckbox(false);
     this.compareDoubleQCheck = this.createCheckbox(false);
+    this.compareDynaQCheck = this.createCheckbox(false);
+    this.comparePpoCheck = this.createCheckbox(false);
 
     this.fairOneChangeCheck = this.createCheckbox(false);
     this.fairConstantsCheck = this.createCheckbox(false);
@@ -458,7 +464,9 @@ export class ScienceFairPanel {
       this.createCheckField("Q-Learning", this.compareQLearnCheck),
       this.createCheckField("SARSA", this.compareSarsaCheck),
       this.createCheckField("Expected SARSA", this.compareExpectedSarsaCheck),
-      this.createCheckField("Double Q-learning", this.compareDoubleQCheck)
+      this.createCheckField("Double Q-learning", this.compareDoubleQCheck),
+      this.createCheckField("Dyna-Q", this.compareDynaQCheck),
+      this.createCheckField("PPO (Tabular)", this.comparePpoCheck)
     );
 
     const checklistRow = document.createElement("div");
@@ -1698,9 +1706,11 @@ export class ScienceFairPanel {
         this.compareSarsaCheck,
         this.compareExpectedSarsaCheck,
         this.compareDoubleQCheck,
+        this.compareDynaQCheck,
+        this.comparePpoCheck,
       ].filter((item) => item.checked).length;
-      if (selectedAlgorithms < 3) {
-        unmet.push("Select at least 3 algorithms. The first 3 appear in live 2D; all selected algorithms appear in trend graphs.");
+      if (selectedAlgorithms < 2) {
+        unmet.push("Select at least 2 algorithms. The first few appear in live 2D; all selected algorithms appear in trend graphs.");
       }
       if (!this.fairHypothesisCheck.checked || !this.fairOneChangeCheck.checked || !this.fairConstantsCheck.checked) {
         unmet.push("Complete the Fair-Test Checklist.");
@@ -1763,7 +1773,7 @@ export class ScienceFairPanel {
     if (this.isRestoringDraft) return;
 
     const draft: ScienceNotebookDraft = {
-      version: 3,
+      version: 4,
       currentStep: this.currentStep,
       scienceEpisodes: this.scienceEpisodesInput.value,
       scienceTrials: this.scienceTrialsInput.value,
@@ -1772,6 +1782,8 @@ export class ScienceFairPanel {
       compareSarsa: this.compareSarsaCheck.checked,
       compareExpectedSarsa: this.compareExpectedSarsaCheck.checked,
       compareDoubleQ: this.compareDoubleQCheck.checked,
+      compareDynaQ: this.compareDynaQCheck.checked,
+      comparePpo: this.comparePpoCheck.checked,
       topic1: this.topic1Input.value,
       topic2: this.topic2Input.value,
       sources: this.sourcesInput.value,
@@ -1830,6 +1842,8 @@ export class ScienceFairPanel {
       this.assignChecked(this.compareSarsaCheck, draft.compareSarsa);
       this.assignChecked(this.compareExpectedSarsaCheck, draft.compareExpectedSarsa);
       this.assignChecked(this.compareDoubleQCheck, draft.compareDoubleQ);
+      this.assignChecked(this.compareDynaQCheck, draft.compareDynaQ);
+      this.assignChecked(this.comparePpoCheck, draft.comparePpo);
       this.assignValue(this.topic1Input, draft.topic1);
       this.assignValue(this.topic2Input, draft.topic2);
       this.assignValue(this.sourcesInput, draft.sources);

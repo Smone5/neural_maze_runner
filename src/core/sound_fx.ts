@@ -166,4 +166,40 @@ export class SoundFx {
             this.goal();
         }
     }
+
+    fire(): void {
+        // Crackling noise
+        if (!this.ctx || !this.isEnabled) return;
+        const now = this.ctx.currentTime;
+        // Burst of noise
+        const count = 5;
+        for (let i = 0; i < count; i++) {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = "sawtooth";
+            osc.frequency.setValueAtTime(100 + Math.random() * 400, now + i * 0.05);
+            gain.gain.setValueAtTime(0.05, now + i * 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.05 + 0.1);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now + i * 0.05);
+            osc.stop(now + i * 0.05 + 0.15);
+        }
+    }
+
+    water(): void {
+        // Splash - low freq slide
+        this.tone(300, 0.3, 0.08, "triangle", 50);
+        setTimeout(() => this.tone(200, 0.4, 0.05, "sine", 30), 50);
+    }
+
+    ice(): void {
+        // Slip - high freq slide up
+        this.tone(600, 0.2, 0.05, "sine", 1200);
+    }
+
+    hole(): void {
+        // Falling - descending whistle
+        this.tone(800, 0.6, 0.06, "sine", 100);
+    }
 }

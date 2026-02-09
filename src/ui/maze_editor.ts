@@ -2,7 +2,7 @@ import { analyzeMaze } from "../core/maze_analyze";
 import { cloneMaze, MazeAnalysis, MazeLayout } from "../core/maze_types";
 import { validateMazeLayout } from "../core/maze_validate";
 
-export type EditorTool = "wall" | "start" | "goal";
+export type EditorTool = "wall" | "start" | "goal" | "ice" | "water" | "fire" | "hole";
 
 export interface EditorStatus {
   valid: boolean;
@@ -81,6 +81,26 @@ export class MazeEditor {
       }
       this.maze.grid[row][col] = "G";
       this.maze.goal = { row, col };
+      return;
+    }
+
+    if (this.tool === "ice") {
+      this.maze.grid[row][col] = "I";
+      return;
+    }
+
+    if (this.tool === "water") {
+      this.maze.grid[row][col] = "W";
+      return;
+    }
+
+    if (this.tool === "fire") {
+      this.maze.grid[row][col] = "F";
+      return;
+    }
+
+    if (this.tool === "hole") {
+      this.maze.grid[row][col] = "H";
     }
   }
 

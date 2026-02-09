@@ -1,24 +1,34 @@
 import {
+  ACESFilmicToneMapping,
   AmbientLight,
   BoxGeometry,
   Color,
   DirectionalLight,
+  FogExp2,
   Group,
   HemisphereLight,
+  InstancedMesh,
   Mesh,
-  MeshLambertMaterial,
   MeshStandardMaterial,
+  Object3D,
+  PCFSoftShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
   PointLight,
   Scene,
+  Sprite,
+  Vector2,
   Vector3,
   WebGLRenderer,
 } from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { Action, Direction, EnvState, StepResult } from "../core/env";
-import { MazeLayout } from "../core/maze_types";
+import { MazeChar, MazeLayout } from "../core/maze_types";
 import { easeInOut, pingPong } from "./animations";
-import { createBotMesh, createFloorMaterial, createGoalMesh, createWallMaterial } from "./renderer_utils";
+import { createBotMesh, createFireGroup, createFloorMaterial, createGoalMesh, createHoleGroup, createIceMesh, createWallMaterial, createWaterMesh } from "./renderer_utils";
 
 interface Transition {
   from: EnvState;
@@ -45,16 +55,45 @@ function dirVec(dir: Direction): { x: number; z: number } {
   return { x: -1, z: 0 };
 }
 
+function isHazardTile(cell: MazeChar): cell is "I" | "W" | "F" | "H" {
+  return cell === "I" || cell === "W" || cell === "F" || cell === "H";
+}
+
 export class ThreeMazeViewer {
   private container: HTMLElement;
+  private overlay!: HTMLDivElement;
   private renderer: WebGLRenderer;
+  private composer!: EffectComposer;
   private scene: Scene;
   private camera: PerspectiveCamera;
   private root = new Group();
   private layout: MazeLayout;
   private wallGroup = new Group();
+  private hazardGroup = new Group();
+  private markerGroup = new Group();
+  private floorMesh: InstancedMesh | null = null;
   private wallGeo = new BoxGeometry(1, 1, 1);
+  private collectibleGeo = new BoxGeometry(0.16, 0.05, 0.16);
+  private startGeo = new BoxGeometry(0.74, 0.04, 0.74);
   private wallMaterial!: MeshStandardMaterial;
+  private collectibleMaterial = new MeshStandardMaterial({
+    color: 0xfef08a,
+    emissive: 0xf59e0b,
+    emissiveIntensity: 0.55,
+    roughness: 0.25,
+    metalness: 0.15,
+  });
+  private startMaterial = new MeshStandardMaterial({
+    color: 0x86efac,
+    emissive: 0x22c55e,
+    emissiveIntensity: 0.26,
+    transparent: true,
+    opacity: 0.88,
+    roughness: 0.45,
+    metalness: 0.1,
+  });
+  private collectibleMeshes = new Map<string, Mesh>();
+  private fireTiles: Group[] = [];
   private goalGroup: Group | null = null;
   private agentGroup: Group;
   private ghostGroup: Group;
@@ -97,7 +136,9 @@ export class ThreeMazeViewer {
     this.layout = layout;
 
     this.scene = new Scene();
-    this.scene.background = new Color("#111116"); // Darker sci-fi background
+    // High-Tech Noir Background
+    this.scene.background = new Color("#000510");
+    this.scene.fog = new FogExp2(0x000510, 0.02); // Reduced fog density significantly
 
     this.camera = new PerspectiveCamera(58, 1, 0.1, 1000);
     this.lastState = {
@@ -126,6 +167,33 @@ export class ThreeMazeViewer {
     try {
       this.renderer = new WebGLRenderer({ antialias: true, alpha: true });
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+      this.renderer.toneMapping = ACESFilmicToneMapping;
+      this.renderer.toneMappingExposure = 2.0; // Increased exposure further
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = PCFSoftShadowMap;
+
+      // Post-Processing Setup
+      this.composer = new EffectComposer(this.renderer);
+
+      // 1. Render Pass
+      const renderPass = new RenderPass(this.scene, this.camera);
+      this.composer.addPass(renderPass);
+
+      // 2. Bloom Pass
+      // Resolution, Strength, Radius, Threshold
+      const bloomPass = new UnrealBloomPass(
+        new Vector2(window.innerWidth, window.innerHeight),
+        0.3,  // Strength - Further reduced from 0.6
+        0.1,  // Radius - Tighter bloom
+        0.9   // Threshold - Only brightest pixels glow
+      );
+      this.composer.addPass(bloomPass);
+
+      // 3. Output Pass (Tone Mapping)
+      const outputPass = new OutputPass();
+      this.composer.addPass(outputPass);
+
       this.ready = true;
     } catch (err) {
       console.warn("Three.js renderer unavailable", err);
@@ -142,13 +210,30 @@ export class ThreeMazeViewer {
     canvasEl.style.display = "block";
     this.container.appendChild(canvasEl);
 
+    // Hazard Overlay
+    this.overlay = document.createElement("div");
+    this.overlay.style.position = "absolute";
+    this.overlay.style.top = "0";
+    this.overlay.style.left = "0";
+    this.overlay.style.width = "100%";
+    this.overlay.style.height = "100%";
+    this.overlay.style.pointerEvents = "none";
+    this.overlay.style.opacity = "0";
+    this.overlay.style.transition = "opacity 0.2s ease-out";
+    this.container.appendChild(this.overlay);
+
     // Lighting
-    const hemi = new HemisphereLight(0xffffff, 0x080820, 0.4); // Softer sky
+    const hemi = new HemisphereLight(0xffffff, 0x222244, 1.5); // Signficantly boosted ambient light
     this.scene.add(hemi);
 
-    const light = new DirectionalLight(0xffffff, 1.0);
+    const light = new DirectionalLight(0xffffff, 3.0); // Boosted Key Light
     light.position.set(5, 12, 8);
     this.scene.add(light);
+
+    // Rim Light (Pink/Purple) for style
+    const rimLight = new DirectionalLight(0xff00cc, 0.6);
+    rimLight.position.set(-5, 5, -5);
+    this.scene.add(rimLight);
 
     // Dynamic Headlamp (Attached to camera in applyCamera)
     this.headlamp = new PointLight(0xffffff, 1.2, 8);
@@ -160,18 +245,12 @@ export class ThreeMazeViewer {
     accentLight.position.set(layout.size / 2, 2, layout.size / 2);
     this.scene.add(accentLight);
 
-    // Floor
-    const floorMat = createFloorMaterial(layout.size);
-    const floor = new Mesh(new PlaneGeometry(layout.size, layout.size), floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.set((layout.size - 1) / 2, -0.001, (layout.size - 1) / 2);
-    this.root.add(floor);
-
     this.root.add(this.agentGroup, this.ghostGroup);
     this.scene.add(this.root);
 
     // Wall Material
     this.wallMaterial = createWallMaterial();
+    /* REMOVE OLD MATERIALS */
 
     this.lastState = {
       row: layout.start.row,
@@ -198,8 +277,11 @@ export class ThreeMazeViewer {
     if (!this.ready) return;
     cancelAnimationFrame(this.raf);
     this.wallGeo.dispose();
-    this.wallMaterial.map?.dispose();
-    this.wallMaterial.dispose();
+    this.collectibleGeo.dispose();
+    this.startGeo.dispose();
+    this.collectibleMaterial.dispose();
+    this.startMaterial.dispose();
+    /* REMOVE OLD DISPOSE */
     this.renderer.dispose();
   }
 
@@ -264,9 +346,11 @@ export class ThreeMazeViewer {
 
   setAgentState(state: EnvState): void {
     this.transition = null;
+    this.resetCollectibles();
     this.lastState = { ...state };
     this.cameraState = { ...state };
     this.placeAgent(state, false);
+    this.collectAt(state.row, state.col);
   }
 
   setGhostState(state: EnvState): void {
@@ -282,7 +366,23 @@ export class ThreeMazeViewer {
     this.ghostGroup.visible = false;
   }
 
+  private collectAt(row: number, col: number): void {
+    const marker = this.collectibleMeshes.get(`${row},${col}`);
+    if (marker) {
+      marker.visible = false;
+    }
+  }
+
+  private resetCollectibles(): void {
+    for (const marker of this.collectibleMeshes.values()) {
+      marker.visible = true;
+    }
+  }
+
   stepTransition(step: StepResult, durationMs: number): void {
+    if (!step.bump && (step.prevState.row !== step.state.row || step.prevState.col !== step.state.col)) {
+      this.collectAt(step.state.row, step.state.col);
+    }
     this.transition = {
       from: step.prevState,
       to: step.state,
@@ -430,16 +530,113 @@ export class ThreeMazeViewer {
 
   private buildMaze(layout: MazeLayout): void {
     this.root.remove(this.wallGroup);
+    this.root.remove(this.hazardGroup);
+    this.root.remove(this.markerGroup);
     this.wallGroup = new Group();
+    this.hazardGroup = new Group();
+    this.markerGroup = new Group();
+    this.collectibleMeshes.clear();
+    this.fireTiles = [];
+
+    // Rebuild Floor (Instanced Tiles)
+    if (this.floorMesh) {
+      this.root.remove(this.floorMesh);
+      this.floorMesh.dispose();
+      this.floorMesh = null;
+    }
+
+    const floorGeo = new PlaneGeometry(1, 1);
+    floorGeo.rotateX(-Math.PI / 2);
+    const floorMat = createFloorMaterial(2); // Assume size 2 to get initial repeat 0.5? No, let's fix texture.
+    if (floorMat.map) floorMat.map.repeat.set(1, 1);
+
+    const count = layout.size * layout.size;
+    this.floorMesh = new InstancedMesh(floorGeo, floorMat, count);
+    this.floorMesh.instanceMatrix.setUsage(35048); // DynamicDrawUsage? No, Static is default.
+
+    let instanceIdx = 0;
+    const dummy = new Object3D();
 
     for (let r = 0; r < layout.size; r += 1) {
       for (let c = 0; c < layout.size; c += 1) {
-        if (layout.grid[r][c] !== "#") continue;
-        const wall = new Mesh(this.wallGeo, this.wallMaterial);
-        wall.position.set(c, 0.5, r);
-        this.wallGroup.add(wall);
+        const cell = layout.grid[r][c];
+
+        // Floor Logic: Skip if Hole or Water
+        // Note: Wall also needs floor? Or does Wall sit ON floor? 
+        // Walls are opaque blocks. We can skip floor under them to save fill rate,
+        // but keeping it is safer against gaps.
+        // Holes (H) and Water (W) DEFINITELY need gaps.
+        if (cell !== "H" && cell !== "W") {
+          dummy.position.set(c, 0, r);
+          dummy.updateMatrix();
+          this.floorMesh.setMatrixAt(instanceIdx++, dummy.matrix);
+        }
+
+        if (cell === "#") {
+          const wall = new Mesh(this.wallGeo, this.wallMaterial);
+          wall.position.set(c, 0.5, r);
+          this.wallGroup.add(wall);
+          continue;
+        }
+
+        if (cell === "S") {
+          const startPad = new Mesh(this.startGeo, this.startMaterial);
+          startPad.position.set(c, 0.025, r);
+          this.markerGroup.add(startPad);
+        } else if (!isHazardTile(cell) && cell !== "G") {
+          const collectible = new Mesh(this.collectibleGeo, this.collectibleMaterial);
+          collectible.position.set(c, 0.05, r);
+          this.markerGroup.add(collectible);
+          this.collectibleMeshes.set(`${r},${c}`, collectible);
+        }
+
+        if (!isHazardTile(cell)) {
+          continue;
+        }
+
+        if (cell === "H") {
+          const hole = createHoleGroup();
+          hole.position.set(c, 0, r);
+          this.hazardGroup.add(hole);
+          continue;
+        }
+
+        if (cell === "I") {
+          const ice = createIceMesh();
+          ice.position.set(c, 0, r);
+          this.hazardGroup.add(ice);
+          continue;
+        }
+
+        if (cell === "W") {
+          const water = createWaterMesh();
+          water.position.set(c, 0, r);
+          // Add random phase for wave animation
+          water.userData = { phase: Math.random() * 100 };
+          this.hazardGroup.add(water);
+          continue;
+        }
+
+        if (cell === "F") {
+          const fire = createFireGroup();
+          fire.position.set(c, 0, r);
+          fire.userData.isFireTile = true;
+          this.hazardGroup.add(fire);
+
+          // Add a local point light for fire
+          const fireLight = new PointLight(0xff6600, 0.8, 4);
+          fireLight.position.set(0, 0.5, 0);
+          // Animate intensity
+          fireLight.userData = { baseIntensity: 0.8 };
+          fire.add(fireLight);
+          this.fireTiles.push(fire);
+        }
       }
     }
+
+    this.floorMesh.count = instanceIdx;
+    this.floorMesh.instanceMatrix.needsUpdate = true;
+    this.root.add(this.floorMesh);
 
     if (this.goalGroup) {
       this.root.remove(this.goalGroup);
@@ -448,12 +645,19 @@ export class ThreeMazeViewer {
     this.goalGroup.position.set(layout.goal.col, 0.35, layout.goal.row);
     this.root.add(this.goalGroup);
 
+    this.root.add(this.markerGroup);
+    this.root.add(this.hazardGroup);
     this.root.add(this.wallGroup);
+
+    this.collectAt(layout.start.row, layout.start.col);
   }
 
   public resize(width: number, height: number): void {
     if (!this.ready || !this.enabled) return;
     this.renderer.setSize(width, height, false);
+    if (this.composer) {
+      this.composer.setSize(width, height);
+    }
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
   }
@@ -464,9 +668,14 @@ export class ThreeMazeViewer {
     if (this.enabled) {
       this.animateAgent(now, false);
       this.animateAgent(now, true);
+      this.animateHazards(now);
       this.applyCamera(now);
       this.animateGoal(now);
-      this.renderer.render(this.scene, this.camera);
+      if (this.composer) {
+        this.composer.render();
+      } else {
+        this.renderer.render(this.scene, this.camera);
+      }
     }
 
     this.raf = requestAnimationFrame(this.renderLoop);
@@ -570,5 +779,80 @@ export class ThreeMazeViewer {
         this.transition = null;
       }
     }
+  }
+  private animateHazards(now: number): void {
+    // Animate Fire
+    this.fireTiles.forEach((fireParams) => {
+      // Animate Light
+      fireParams.children.forEach((child) => {
+        if (child instanceof PointLight) {
+          const base = (child.userData.baseIntensity as number) || 0.8;
+          child.intensity = base + Math.sin(now * 0.01) * 0.3 + (Math.random() - 0.5) * 0.2;
+        }
+        // Animate Sprites (Particles)
+        if (child instanceof Sprite && child.userData.speed) {
+          const ud = child.userData;
+          const y = (now * ud.speed + ud.offset) % 1;
+
+          // Rise
+          const h = 0.8;
+          child.position.y = 0.1 + y * h;
+
+          // Fade and Scale
+          // 0 -> 1 -> 0 alpha? Or just fade out at top
+          // Scale: Starts small, grows, then shrinks
+          let s = ud.baseScale;
+          if (y < 0.2) s *= y * 5; // Grow
+          else s *= (1 - (y - 0.2) * 1.25); // Shrink
+
+          child.scale.set(s, s, s);
+
+          // Wiggle
+          child.position.x = Math.sin(now * 0.005 + ud.offset) * ud.amp;
+          child.position.z = Math.cos(now * 0.003 + ud.offset) * ud.amp;
+        }
+      });
+    });
+
+    // Animate Water (in hazardGroup)
+    this.hazardGroup.children.forEach((group) => {
+      // If the Group has a phase (set in buildMaze), use it
+      if (group.userData.phase !== undefined) {
+        // Find the surface mesh
+        group.children.forEach((child) => {
+          if (child.userData.isWaterSurface) {
+            const phase = group.userData.phase;
+            // Texture offset or simple vertex displacement simulation via scale/pos
+            // "Breathing" water
+            child.position.y = -0.05 + Math.sin(now * 0.002 + phase) * 0.01;
+          }
+        });
+      }
+    });
+  }
+
+  public triggerHazardEffect(type: "F" | "W" | "I" | "H"): void {
+    if (!this.overlay) return;
+
+    // Reset
+    this.overlay.style.transition = "none";
+    this.overlay.style.opacity = "0.8";
+
+    if (type === "F") {
+      this.overlay.style.backgroundColor = "#ff4400"; // Red/Orange
+    } else if (type === "W") {
+      this.overlay.style.backgroundColor = "#0066ff"; // Blue
+    } else if (type === "I") {
+      this.overlay.style.backgroundColor = "#ccffff"; // Ice Cyan
+    } else if (type === "H") {
+      this.overlay.style.backgroundColor = "#000000"; // Black
+      this.overlay.style.opacity = "1.0";
+    }
+
+    // Fade out
+    setTimeout(() => {
+      this.overlay.style.transition = "opacity 0.6s ease-out";
+      this.overlay.style.opacity = "0";
+    }, 50);
   }
 }

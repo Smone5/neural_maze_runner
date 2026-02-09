@@ -1,7 +1,14 @@
 import { Action } from "../core/env";
 import { Rng } from "../core/rng";
 
-export type AlgorithmType = "Random" | "Q-learning" | "SARSA" | "Expected SARSA" | "Double Q-learning";
+export type AlgorithmType =
+  | "Random"
+  | "Q-learning"
+  | "SARSA"
+  | "Expected SARSA"
+  | "Double Q-learning"
+  | "Dyna-Q"
+  | "PPO (Tabular)";
 
 export interface AgentParams {
   alpha: number;

@@ -22,6 +22,8 @@ export class Dashboard {
   private kidGuide: HTMLDetailsElement;
   private returnChart: Chart;
   private compactMode = false;
+  private primarySeriesLabel = "Episode points";
+  private compareSeriesLabel: string | null = null;
 
   constructor() {
     const hint = (text: string): HTMLSpanElement => {
@@ -77,11 +79,20 @@ export class Dashboard {
         labels: [],
         datasets: [
           {
-            label: "Episode points",
+            label: this.primarySeriesLabel,
             data: [],
             borderColor: "#ff5a36",
             backgroundColor: "rgba(255, 90, 54, 0.2)",
             tension: 0.2,
+          },
+          {
+            label: "Compare episode points",
+            data: [],
+            borderColor: "#3f8cff",
+            backgroundColor: "rgba(63, 140, 255, 0.18)",
+            tension: 0.2,
+            borderDash: [6, 4],
+            hidden: true,
           },
         ],
       },
@@ -103,6 +114,9 @@ export class Dashboard {
     this.metricsList.innerHTML = "";
     this.returnChart.data.labels = [];
     this.returnChart.data.datasets[0].data = [];
+    if (this.returnChart.data.datasets[1]) {
+      this.returnChart.data.datasets[1].data = [];
+    }
     this.returnChart.update();
   }
 
@@ -169,10 +183,35 @@ export class Dashboard {
     this.kidGuide.open = !shouldCollapse;
   }
 
-  pushEpisodeReturn(episode: number, episodeReturn: number): void {
+  setEpisodeComparison(primaryAlgorithm: string, compareAlgorithm: string | null): void {
+    this.primarySeriesLabel = `${primaryAlgorithm} points`;
+    this.compareSeriesLabel =
+      compareAlgorithm && compareAlgorithm !== primaryAlgorithm ? `${compareAlgorithm} points` : null;
+
+    if (this.returnChart.data.datasets[0]) {
+      this.returnChart.data.datasets[0].label = this.primarySeriesLabel;
+    }
+    if (this.returnChart.data.datasets[1]) {
+      this.returnChart.data.datasets[1].label = this.compareSeriesLabel ?? "Compare episode points";
+      this.returnChart.data.datasets[1].hidden = this.compareSeriesLabel == null;
+      this.returnChart.data.datasets[1].data = [];
+    }
+    this.returnChart.update();
+  }
+
+  pushEpisodeReturn(episode: number, episodeReturn: number, compareEpisodeReturn?: number): void {
     this.lastStats.episodes = episode;
     this.returnChart.data.labels?.push(String(episode));
     (this.returnChart.data.datasets[0].data as number[]).push(toDisplayPoints(episodeReturn));
+    const compareDataset = this.returnChart.data.datasets[1];
+    if (compareDataset) {
+      const compareData = compareDataset.data as Array<number | null>;
+      if (compareDataset.hidden || compareEpisodeReturn == null) {
+        compareData.push(null);
+      } else {
+        compareData.push(toDisplayPoints(compareEpisodeReturn));
+      }
+    }
     this.returnChart.update();
   }
 

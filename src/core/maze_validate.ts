@@ -1,7 +1,11 @@
-import { MazeChar, MazeJson, MazeLayout, MazeValidationResult, Point } from "./maze_types";
+import { DEFAULT_MAZE_LEGEND, MazeChar, MazeJson, MazeLayout, MazeValidationResult, Point } from "./maze_types";
 
 function inBounds(row: number, col: number, size: number): boolean {
   return row >= 0 && row < size && col >= 0 && col < size;
+}
+
+function isPathCell(cell: MazeChar): boolean {
+  return cell !== "#" && cell !== "H";
 }
 
 function findSpecial(grid: MazeChar[][], key: "S" | "G"): Point[] {
@@ -41,7 +45,7 @@ function bfsReachable(grid: MazeChar[][], start: Point, goal: Point): boolean {
       if (!inBounds(nr, nc, size)) {
         continue;
       }
-      if (visited[nr][nc] || grid[nr][nc] === "#") {
+      if (visited[nr][nc] || !isPathCell(grid[nr][nc])) {
         continue;
       }
       visited[nr][nc] = true;
@@ -69,15 +73,15 @@ export function parseMazeJson(input: MazeJson): MazeLayout {
 export function validateMazeJson(input: MazeJson): MazeValidationResult {
   const errors: string[] = [];
 
-  if (!(input.size === 9 || input.size === 11)) {
-    errors.push("Maze size must be 9 or 11.");
+  if (!(input.size === 9 || input.size === 11 || input.size === 13 || input.size === 15 || input.size === 17)) {
+    errors.push("Maze size must be one of: 9, 11, 13, 15, 17.");
   }
 
   if (input.grid.length !== input.size) {
     errors.push(`Grid row count (${input.grid.length}) must match size (${input.size}).`);
   }
 
-  const allowedChars = new Set(["#", ".", "S", "G"]);
+  const allowedChars = new Set(["#", ".", "S", "G", "I", "W", "F", "H"]);
   const parsed: MazeChar[][] = [];
 
   for (let r = 0; r < input.grid.length; r += 1) {
@@ -152,11 +156,6 @@ export function validateMazeLayout(layout: MazeLayout): MazeValidationResult {
     name: layout.name,
     size: layout.size,
     grid: layout.grid.map((row) => row.join("")),
-    legend: {
-      "#": "wall",
-      ".": "floor",
-      S: "start",
-      G: "goal",
-    },
+    legend: DEFAULT_MAZE_LEGEND,
   });
 }

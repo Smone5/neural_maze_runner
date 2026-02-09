@@ -10,8 +10,10 @@ import { makeRng } from "./core/rng";
 import { TopDownCanvasRenderer } from "./render/topdown_canvas";
 import { ThreeMazeViewer, ThreeViewMode } from "./render/three_viewer";
 import { AlgorithmType, RLAgent } from "./rl/agent_types";
+import { DynaQAgent } from "./rl/dyna_q";
 import { DoubleQLearningAgent } from "./rl/double_q_learning";
 import { ExpectedSarsaAgent } from "./rl/expected_sarsa";
+import { TabularPpoAgent } from "./rl/ppo_tabular";
 import { QLearningAgent } from "./rl/q_learning";
 import { RandomAgent } from "./rl/random_agent";
 import { SarsaAgent } from "./rl/sarsa";
@@ -111,7 +113,9 @@ function makeAgent(algorithm: AlgorithmType): RLAgent {
   if (algorithm === "Q-learning") return new QLearningAgent();
   if (algorithm === "SARSA") return new SarsaAgent();
   if (algorithm === "Expected SARSA") return new ExpectedSarsaAgent();
-  return new DoubleQLearningAgent();
+  if (algorithm === "Double Q-learning") return new DoubleQLearningAgent();
+  if (algorithm === "Dyna-Q") return new DynaQAgent();
+  return new TabularPpoAgent();
 }
 
 function clampInt(value: number, min: number, max: number): number {
@@ -411,10 +415,18 @@ async function main(): Promise<void> {
   startTool.textContent = "Place Start";
   const goalTool = document.createElement("button");
   goalTool.textContent = "Place Goal";
+  const iceTool = document.createElement("button");
+  iceTool.textContent = "Place Ice";
+  const waterTool = document.createElement("button");
+  waterTool.textContent = "Place Water";
+  const fireTool = document.createElement("button");
+  fireTool.textContent = "Place Fire";
+  const holeTool = document.createElement("button");
+  holeTool.textContent = "Place Hole";
   const saveMazeBtn = document.createElement("button");
   saveMazeBtn.textContent = "Save Edited Maze";
 
-  toolRow.append(wallTool, startTool, goalTool, saveMazeBtn);
+  toolRow.append(wallTool, startTool, goalTool, iceTool, waterTool, fireTool, holeTool, saveMazeBtn);
   const editorStatus = document.createElement("div");
   editorStatus.className = "editor-status";
   const shareRow = document.createElement("div");
@@ -633,7 +645,16 @@ async function main(): Promise<void> {
   }
 
   function setAppMode(mode: AppMode) {
+    const previousMode = currentMode;
+    const crossingRaceBoundary = previousMode !== mode && (
+      (mode === "CHALLENGE" && runMode !== "idle" && runMode !== "race") ||
+      (mode !== "CHALLENGE" && runMode === "race")
+    );
+
     currentMode = mode;
+    if (crossingRaceBoundary) {
+      cancelRun();
+    }
     modeTabs.forEach((tab, key) => {
       const isActive = key === mode;
       tab.classList.toggle("active", isActive);
@@ -687,7 +708,32 @@ async function main(): Promise<void> {
     }
 
     // --- REPARENTING LOGIC ---
-    if (mode === "ARCADE") {
+    if (mode === "LEARN") {
+      const learnThreeSlot = learnContainer.querySelector<HTMLElement>(".cockpit-view-3d");
+      const learnMapSlot = learnContainer.querySelector<HTMLElement>(".cockpit-view-2d");
+
+      if (learnThreeSlot) {
+        learnThreeSlot.append(threeWrap);
+      }
+      if (learnMapSlot) {
+        learnMapSlot.append(viewerPanel);
+      }
+      if (canvas.parentElement !== viewerPanel) {
+        viewerPanel.append(canvas);
+      }
+
+      if (threeViewer.ready) {
+        threeViewer.setFirstPersonTouchLookEnabled(false);
+        threeViewer.setViewMode("orbit");
+      }
+
+      setTimeout(() => {
+        if (threeViewer.ready) {
+          threeViewer.resize(threeWrap.clientWidth || 1, threeWrap.clientHeight || 1);
+        }
+        resizeTopRenderer();
+      }, 80);
+    } else if (mode === "ARCADE") {
       // Move 3D View to Main
       areaMain.append(threeWrap, arcadePlayback);
       arcadeHero.append(threeControls);
@@ -787,11 +833,57 @@ async function main(): Promise<void> {
       selected === "Q-learning" ||
       selected === "SARSA" ||
       selected === "Expected SARSA" ||
-      selected === "Double Q-learning"
+      selected === "Double Q-learning" ||
+      selected === "Dyna-Q" ||
+      selected === "PPO (Tabular)"
     ) {
       return selected;
     }
     return "Q-learning";
+  }
+
+  function selectedPrimaryAlgorithm(): AlgorithmType {
+    const selected = controls.algorithmSelect.value;
+    if (
+      selected === "Random" ||
+      selected === "Q-learning" ||
+      selected === "SARSA" ||
+      selected === "Expected SARSA" ||
+      selected === "Double Q-learning" ||
+      selected === "Dyna-Q" ||
+      selected === "PPO (Tabular)"
+    ) {
+      return selected;
+    }
+    return "Q-learning";
+  }
+
+  function selectedCompareAlgorithm(): AlgorithmType | null {
+    const selected = controls.compareSelect.value;
+    if (
+      selected === "Random" ||
+      selected === "Q-learning" ||
+      selected === "SARSA" ||
+      selected === "Expected SARSA" ||
+      selected === "Double Q-learning" ||
+      selected === "Dyna-Q" ||
+      selected === "PPO (Tabular)"
+    ) {
+      return selected;
+    }
+    return null;
+  }
+
+  function defaultComparisonPair(primary: AlgorithmType): AlgorithmType {
+    if (primary === "Q-learning") return "Dyna-Q";
+    return "Q-learning";
+  }
+
+  function quickCompareAlgorithms(): AlgorithmType[] {
+    const primary = selectedPrimaryAlgorithm();
+    const requested = selectedCompareAlgorithm();
+    const secondary = requested && requested !== primary ? requested : defaultComparisonPair(primary);
+    return [primary, secondary];
   }
 
   function mazeFingerprint(layout: MazeLayout): string {
@@ -964,8 +1056,6 @@ async function main(): Promise<void> {
     const selected = controls.algorithmSelect.value;
     if (selected === "Random") {
       setRacePolicyInfo("Random is guessing. Press Train + Race to build a smart AI racer.");
-    } else if (selected === "All") {
-      setRacePolicyInfo("Race uses one learning AI. Press Train + Race to start.");
     } else {
       setRacePolicyInfo(`No trained AI racer yet. Press Train + Race.`);
     }
@@ -1033,11 +1123,15 @@ async function main(): Promise<void> {
   }
 
   function getEpisodes(): number {
-    return clampInt(Number(controls.episodesInput.value || 50), 1, 500);
+    const clamped = clampInt(Number(controls.episodesInput.value || 50), 1, 500);
+    controls.episodesInput.value = String(clamped);
+    return clamped;
   }
 
   function getTrials(): number {
-    return clampInt(Number(controls.trialsInput.value || 3), 3, 20);
+    const clamped = clampInt(Number(controls.trialsInput.value || 3), 3, 20);
+    controls.trialsInput.value = String(clamped);
+    return clamped;
   }
 
   function getScienceAlgorithms(): AlgorithmType[] {
@@ -1047,6 +1141,8 @@ async function main(): Promise<void> {
     if (sciencePanel.compareSarsaCheck.checked) selected.push("SARSA");
     if (sciencePanel.compareExpectedSarsaCheck.checked) selected.push("Expected SARSA");
     if (sciencePanel.compareDoubleQCheck.checked) selected.push("Double Q-learning");
+    if (sciencePanel.compareDynaQCheck.checked) selected.push("Dyna-Q");
+    if (sciencePanel.comparePpoCheck.checked) selected.push("PPO (Tabular)");
     return selected;
   }
 
@@ -1116,6 +1212,7 @@ async function main(): Promise<void> {
     controls.editToggle.disabled = running;
     controls.mazeSelect.disabled = running;
     controls.algorithmSelect.disabled = running;
+    controls.compareSelect.disabled = running;
     controls.episodesInput.disabled = running;
     controls.trialsInput.disabled = running;
     controls.speedSelect.disabled = false; // Always allow speed changes
@@ -1148,11 +1245,15 @@ async function main(): Promise<void> {
     editorStatus.textContent = parts.join(" | ");
   }
 
-  function setEditorToolUi(tool: "wall" | "start" | "goal"): void {
+  function setEditorToolUi(tool: "wall" | "start" | "goal" | "ice" | "water" | "fire" | "hole"): void {
     editor.setTool(tool);
     wallTool.classList.toggle("tool-active", tool === "wall");
     startTool.classList.toggle("tool-active", tool === "start");
     goalTool.classList.toggle("tool-active", tool === "goal");
+    iceTool.classList.toggle("tool-active", tool === "ice");
+    waterTool.classList.toggle("tool-active", tool === "water");
+    fireTool.classList.toggle("tool-active", tool === "fire");
+    holeTool.classList.toggle("tool-active", tool === "hole");
   }
 
   function syncRenderersToMaze(maze: MazeLayout): void {
@@ -1286,17 +1387,28 @@ async function main(): Promise<void> {
     setRunningUi(runMode);
     await sound.resume();
 
-    const selected = controls.algorithmSelect.value;
-    const algorithm = selected === "All" ? "Q-learning" : (selected as AlgorithmType);
+    const algorithm = selectedPrimaryAlgorithm();
+    const requestedCompare = selectedCompareAlgorithm();
+    const compareAlgorithm = requestedCompare && requestedCompare !== algorithm
+      ? requestedCompare
+      : defaultComparisonPair(algorithm);
+    const compareEnabled = compareAlgorithm !== algorithm;
     const episodes = getEpisodes();
 
     const agent = makeAgent(algorithm);
     const env = new MazeEnv(currentMaze);
+    const compareAgent = compareEnabled ? makeAgent(compareAlgorithm) : null;
+    const compareEnv = compareEnabled ? new MazeEnv(currentMaze) : null;
     const demoSeed = 202601;
     agent.startTrial(demoSeed);
+    compareAgent?.startTrial(demoSeed);
 
-    setStatus(`Running demo: ${algorithm} for ${episodes} episodes.`);
-    setStatus(`Learning mode: ${algorithm} live training for ${episodes} episodes.`);
+    dashboard.setEpisodeComparison(algorithm, compareEnabled ? compareAlgorithm : null);
+    setStatus(
+      compareEnabled
+        ? `Learning mode: ${algorithm} (live) vs ${compareAlgorithm} (episode compare) for ${episodes} episodes.`
+        : `Learning mode: ${algorithm} live training for ${episodes} episodes.`
+    );
 
     // Only switch to ARCADE if we are NOT in the Mission Cockpit (LEARN mode)
     if (currentMode !== "LEARN") {
@@ -1381,6 +1493,26 @@ async function main(): Promise<void> {
               threeViewer.stepTransition(info.step, speedMs);
             }
 
+            // Trigger Hazard Effects
+            const cell = currentMaze.grid[info.step.state.row][info.step.state.col];
+            if (cell === "F") {
+              sound.fire();
+              topRenderer.triggerHazardEffect("F");
+              if (threeViewer.ready) threeViewer.triggerHazardEffect("F");
+            } else if (cell === "W") {
+              sound.water();
+              topRenderer.triggerHazardEffect("W");
+              if (threeViewer.ready) threeViewer.triggerHazardEffect("W");
+            } else if (cell === "I") {
+              sound.ice();
+              topRenderer.triggerHazardEffect("I");
+              if (threeViewer.ready) threeViewer.triggerHazardEffect("I");
+            } else if (cell === "H") {
+              sound.hole();
+              topRenderer.triggerHazardEffect("H");
+              if (threeViewer.ready) threeViewer.triggerHazardEffect("H");
+            }
+
             if (info.step.action === 0 && !info.step.bump) sound.step();
             if (info.step.action !== 0) sound.turn();
             if (info.step.reward > 0.5) sound.reward();
@@ -1425,7 +1557,22 @@ async function main(): Promise<void> {
       }
 
       completed.push(metrics);
-      dashboard.pushEpisodeReturn(ep + 1, metrics.episodeReturn);
+      let compareEpisodeReturn: number | undefined;
+      if (compareAgent && compareEnv) {
+        const compareMetrics = await runEpisode({
+          token,
+          env: compareEnv,
+          agent: compareAgent,
+          rngSeed: demoSeed + ep,
+          episodeIndex: ep,
+          totalEpisodes: episodes,
+        });
+        if (compareMetrics == null) {
+          return;
+        }
+        compareEpisodeReturn = compareMetrics.episodeReturn;
+      }
+      dashboard.pushEpisodeReturn(ep + 1, metrics.episodeReturn, compareEpisodeReturn);
       if (turbo) {
         topRenderer.setAgentState(env.state);
         if (threeViewer.ready && controls.threeToggle.checked) {
@@ -1548,15 +1695,15 @@ async function main(): Promise<void> {
       : getTrials();
     const algorithms: AlgorithmType[] = useScienceInputs
       ? getScienceAlgorithms()
-      : ["Random", "Q-learning", "SARSA", "Expected SARSA", "Double Q-learning"];
+      : quickCompareAlgorithms();
     if (algorithms.length === 0) {
       setStatus("Select at least one algorithm in Science Setup before starting the test.");
       runMode = "idle";
       setRunningUi(runMode);
       return;
     }
-    if (useScienceInputs && algorithms.length < 3) {
-      setStatus("Select at least 3 algorithms in Science Setup before starting the test.");
+    if (useScienceInputs && algorithms.length < 2) {
+      setStatus("Select at least 2 algorithms in Science Setup before starting the test.");
       runMode = "idle";
       setRunningUi(runMode);
       return;
@@ -1932,8 +2079,6 @@ async function main(): Promise<void> {
     const selected = controls.algorithmSelect.value;
     if (selected === "Random") {
       setStatus("Race mode uses Q-learning because Random does not learn a policy.");
-    } else if (selected === "All") {
-      setStatus("Race mode uses Q-learning policy from the selected maze.");
     } else {
       setStatus(`Training ${raceAlgorithm} policy for race (${trainEpisodes} episodes)...`);
     }
@@ -1987,7 +2132,7 @@ async function main(): Promise<void> {
         )
       );
       controls.episodesInput.value = String(nextEpisodes);
-      if (controls.algorithmSelect.value === "Random" || controls.algorithmSelect.value === "All") {
+      if (controls.algorithmSelect.value === "Random") {
         controls.algorithmSelect.value = "Q-learning";
       }
       updateRaceButtonState();
@@ -2413,9 +2558,9 @@ async function main(): Promise<void> {
     if (!selected) return;
     currentLevelId = null;
     editor.setEnabled(false);
+    topRenderer.setEditorEnabled(false);
     controls.editToggle.textContent = "Edit Maze";
     applyMaze(selected);
-    setAppMode("LAB");
     setStatus(`Loaded ${selected.name}.`);
   };
 
@@ -2463,6 +2608,22 @@ async function main(): Promise<void> {
   goalTool.onclick = () => {
     setEditorToolUi("goal");
     setStatus("Editor tool: Place Goal");
+  };
+  iceTool.onclick = () => {
+    setEditorToolUi("ice");
+    setStatus("Editor tool: Place Ice (slides forward)");
+  };
+  waterTool.onclick = () => {
+    setEditorToolUi("water");
+    setStatus("Editor tool: Place Water (extra penalty)");
+  };
+  fireTool.onclick = () => {
+    setEditorToolUi("fire");
+    setStatus("Editor tool: Place Fire (heavy penalty)");
+  };
+  holeTool.onclick = () => {
+    setEditorToolUi("hole");
+    setStatus("Editor tool: Place Hole (fall = run ends)");
   };
 
   saveMazeBtn.onclick = () => {
@@ -2543,7 +2704,7 @@ async function main(): Promise<void> {
     // helpPanel.style.display = showing ? "none" : "block";
     // controls.helpBtn.textContent = showing ? "Help" : "Hide Help";
     setStatus(
-      "Watch Learning = one AI with live visuals. Science Test = all AIs, fair trials, charts + CSV for science fair."
+      "Watch Learning = one AI with live visuals. Science Test = compare selected AIs with fair trials, charts + CSV."
     );
   };
 

@@ -1,11 +1,26 @@
-export type MazeChar = "#" | "." | "S" | "G";
+export type MazeChar = "#" | "." | "S" | "G" | "I" | "W" | "F" | "H";
 
 export interface MazeLegend {
   "#": "wall";
   ".": "floor";
   S: "start";
   G: "goal";
+  I?: "ice";
+  W?: "water";
+  F?: "fire";
+  H?: "hole";
 }
+
+export const DEFAULT_MAZE_LEGEND: MazeLegend = {
+  "#": "wall",
+  ".": "floor",
+  S: "start",
+  G: "goal",
+  I: "ice",
+  W: "water",
+  F: "fire",
+  H: "hole",
+};
 
 export interface MazeJson {
   name: string;
@@ -44,12 +59,7 @@ export function toMazeJson(layout: MazeLayout): MazeJson {
     name: layout.name,
     size: layout.size,
     grid: layout.grid.map((row) => row.join("")),
-    legend: {
-      "#": "wall",
-      ".": "floor",
-      S: "start",
-      G: "goal",
-    },
+    legend: DEFAULT_MAZE_LEGEND,
   };
 }
 

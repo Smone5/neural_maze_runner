@@ -1,7 +1,13 @@
-import { MazeJson, MazeLayout } from "./maze_types";
+import { DEFAULT_MAZE_LEGEND, MazeJson, MazeLayout } from "./maze_types";
 import { parseMazeJson, validateMazeJson } from "./maze_validate";
 
-export const BUILTIN_MAZE_FILES = ["maze1_easy_9.json", "maze2_medium_11.json"];
+export const BUILTIN_MAZE_FILES = [
+  "maze1_easy_9.json",
+  "maze2_medium_11.json",
+  "maze3_hazard_fork_9.json",
+  "maze4_frozen_lake_11.json",
+  "maze5_elemental_gauntlet_11.json",
+];
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
@@ -42,12 +48,7 @@ export function encodeMazeToShareUrl(maze: MazeLayout): string {
     name: maze.name,
     size: maze.size,
     grid: maze.grid.map((row) => row.join("")),
-    legend: {
-      "#": "wall",
-      ".": "floor",
-      S: "start",
-      G: "goal",
-    },
+    legend: DEFAULT_MAZE_LEGEND,
   };
   const encoded = bytesToBase64(new TextEncoder().encode(JSON.stringify(payload)));
   const url = new URL(window.location.href);

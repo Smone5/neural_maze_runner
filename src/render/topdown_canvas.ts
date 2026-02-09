@@ -21,6 +21,10 @@ const COLORS = {
   bg: "#f2efe8",
   wall: "#242424",
   floor: "#f7f4eb",
+  ice: "#dff6ff",
+  water: "#9ad9ff",
+  fire: "#ffb08f",
+  hole: "#4a5060",
   grid: "#ddd5c7",
   agent: "#ff5a36",
   agentStroke: "#9f2e16",
@@ -54,6 +58,9 @@ export class TopDownCanvasRenderer {
   private lastGoalAt = 0;
   private animationFrame = 0;
   private collectibles: boolean[][] = [];
+  private activeEffect: { type: "F" | "W" | "I" | "H"; startsAt: number } | null = null;
+  private trail: { x: number; y: number; alpha: number }[] = [];
+  private pulseStart = 0;
 
   onCellClick: ((row: number, col: number) => void) | null = null;
 
@@ -138,6 +145,11 @@ export class TopDownCanvasRenderer {
 
   stepTransition(step: StepResult, speedMs: number): void {
     this.collectFromStep(step);
+    // Add trail point
+    if (this.visualState) {
+      this.trail.push({ x: this.visualState.col, y: this.visualState.row, alpha: 1.0 });
+      if (this.trail.length > 20) this.trail.shift();
+    }
     this.transition = {
       from: step.prevState,
       to: step.state,
@@ -162,6 +174,10 @@ export class TopDownCanvasRenderer {
     };
   }
 
+  triggerHazardEffect(type: "F" | "W" | "I" | "H"): void {
+    this.activeEffect = { type, startsAt: performance.now() };
+  }
+
   resize(width: number, height: number): void {
     this.canvas.width = width;
     this.canvas.height = height;
@@ -171,6 +187,7 @@ export class TopDownCanvasRenderer {
     this.collectibles = this.layout.grid.map((row, r) =>
       row.map((cell, c) => {
         if (cell === "#") return false;
+        if (cell === "I" || cell === "W" || cell === "F" || cell === "H") return false;
         if (r === this.layout.goal.row && c === this.layout.goal.col) return false;
         return true;
       })
@@ -226,8 +243,101 @@ export class TopDownCanvasRenderer {
           this.ctx.fillStyle = COLORS.wall;
           this.ctx.fillRect(x, y, size, size);
         } else {
-          this.ctx.fillStyle = COLORS.floor;
+          this.ctx.fillStyle =
+            cell === "I"
+              ? COLORS.ice
+              : cell === "W"
+                ? COLORS.water
+                : cell === "F"
+                  ? COLORS.fire
+                  : cell === "H"
+                    ? COLORS.hole
+                    : COLORS.floor;
           this.ctx.fillRect(x, y, size, size);
+
+          if (cell === "I") {
+            // Ice shimmer
+            this.ctx.save();
+            this.ctx.fillStyle = COLORS.ice;
+            this.ctx.fillRect(x, y, size, size);
+
+            // Animated shimmer line
+            const phase = (performance.now() * 0.001 + c * 0.2 + r * 0.1) % 1;
+            this.ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
+            this.ctx.lineWidth = 2;
+            this.ctx.beginPath();
+            const shimX = x + size * phase;
+            this.ctx.moveTo(shimX, y);
+            this.ctx.lineTo(shimX - size * 0.3, y + size);
+            this.ctx.stroke();
+            this.ctx.restore();
+
+          } else if (cell === "W") {
+            // Water waves
+            this.ctx.save();
+            this.ctx.fillStyle = COLORS.water;
+            this.ctx.fillRect(x, y, size, size);
+
+            this.ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+            this.ctx.lineWidth = 1.5;
+            const time = performance.now() * 0.003;
+            for (let i = 0; i < 2; i++) {
+              const yOff = y + size * (0.3 + i * 0.4);
+              this.ctx.beginPath();
+              for (let k = 0; k <= size; k += 4) {
+                const waveY = Math.sin(k * 0.1 + time + c) * 3;
+                this.ctx.lineTo(x + k, yOff + waveY);
+              }
+              this.ctx.stroke();
+            }
+            this.ctx.restore();
+
+          } else if (cell === "F") {
+            // Flickering Fire
+            this.ctx.save();
+            // Base background
+            this.ctx.fillStyle = "#4a0404";
+            this.ctx.fillRect(x, y, size, size);
+
+            const time = performance.now() * 0.01;
+            const flicker = Math.sin(time * 5 + r * 11 + c * 7);
+
+            // Core
+            const cx = x + size / 2;
+            const cy = y + size * 0.7;
+            const rBase = size * 0.35 + flicker * 2;
+
+            const grad = this.ctx.createRadialGradient(cx, cy, 0, cx, cy, rBase);
+            grad.addColorStop(0, "#ffff00");
+            grad.addColorStop(0.4, "#ff8800");
+            grad.addColorStop(1, "rgba(255, 0, 0, 0)");
+
+            this.ctx.fillStyle = grad;
+            this.ctx.beginPath();
+            this.ctx.arc(cx, cy, rBase, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.restore();
+
+          } else if (cell === "H") {
+            // Deep Hole
+            this.ctx.save();
+            this.ctx.fillStyle = COLORS.floor; // rim bg?
+            this.ctx.fillRect(x, y, size, size);
+
+            const cx = x + size / 2;
+            const cy = y + size / 2;
+            const rMax = size * 0.4;
+            const grad = this.ctx.createRadialGradient(cx, cy, rMax * 0.2, cx, cy, rMax);
+            grad.addColorStop(0, "#000000");
+            grad.addColorStop(0.8, "#111111");
+            grad.addColorStop(1, "#333333");
+
+            this.ctx.fillStyle = grad;
+            this.ctx.beginPath();
+            this.ctx.arc(cx, cy, rMax, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.restore();
+          }
         }
 
         this.ctx.strokeStyle = COLORS.grid;
@@ -288,6 +398,57 @@ export class TopDownCanvasRenderer {
     }
   }
 
+
+  private drawHazardEffect(now: number): void {
+    if (!this.activeEffect) return;
+    const elapsed = now - this.activeEffect.startsAt;
+    const duration = 600;
+    if (elapsed > duration) {
+      this.activeEffect = null;
+      return;
+    }
+
+    const t = elapsed / duration;
+    // Visually, we want a ripple or flash centered on the agent
+    const size = this.cellSize();
+    const offsetX = (this.canvas.width - size * this.layout.size) / 2;
+    const offsetY = (this.canvas.height - size * this.layout.size) / 2;
+
+    // We use the current visual state of the agent for the center
+    const cx = offsetX + this.visualState.col * size + size / 2;
+    const cy = offsetY + this.visualState.row * size + size / 2;
+
+    this.ctx.save();
+    if (this.activeEffect.type === "F") {
+      // Expanding red circle
+      this.ctx.beginPath();
+      this.ctx.arc(cx, cy, size * (0.5 + t * 2), 0, Math.PI * 2);
+      this.ctx.fillStyle = `rgba(255, 60, 0, ${0.6 * (1 - t)})`;
+      this.ctx.fill();
+    } else if (this.activeEffect.type === "W") {
+      // Ripple rings
+      this.ctx.beginPath();
+      this.ctx.arc(cx, cy, size * (0.5 + t * 3), 0, Math.PI * 2);
+      this.ctx.strokeStyle = `rgba(0, 150, 255, ${0.8 * (1 - t)})`;
+      this.ctx.lineWidth = 4;
+      this.ctx.stroke();
+    } else if (this.activeEffect.type === "I") {
+      // Slip lines / star
+      this.ctx.translate(cx, cy);
+      this.ctx.rotate(t * 2);
+      this.ctx.fillStyle = `rgba(200, 255, 255, ${0.8 * (1 - t)})`;
+      this.ctx.fillRect(-size, -2, size * 2, 4);
+      this.ctx.fillRect(-2, -size, 4, size * 2);
+    } else if (this.activeEffect.type === "H") {
+      // Implosion / dark void expanding
+      this.ctx.beginPath();
+      this.ctx.arc(cx, cy, size * (0.2 + t * 4), 0, Math.PI * 2);
+      this.ctx.fillStyle = `rgba(0, 0, 0, ${0.9 * (1 - t)})`;
+      this.ctx.fill();
+    }
+    this.ctx.restore();
+  }
+
   private drawAgent(state: VisualState, ghost = false): void {
     const size = this.cellSize();
     const offsetX = (this.canvas.width - size * this.layout.size) / 2;
@@ -313,6 +474,19 @@ export class TopDownCanvasRenderer {
     this.ctx.moveTo(cx, cy);
     this.ctx.lineTo(cx + vec.x * radius * 0.9, cy + vec.y * radius * 0.9);
     this.ctx.stroke();
+
+    if (!ghost) {
+      // Pulse Effect
+      const pulseT = (performance.now() % 2000) / 2000;
+      this.ctx.save();
+      this.ctx.beginPath();
+      this.ctx.arc(cx, cy, size * (0.3 + pulseT * 0.4), 0, Math.PI * 2);
+      this.ctx.strokeStyle = `rgba(255, 255, 255, ${1 - pulseT})`;
+      this.ctx.lineWidth = 2;
+      this.ctx.stroke();
+      this.ctx.restore();
+    }
+
     this.ctx.globalAlpha = 1;
   }
 
@@ -345,7 +519,41 @@ export class TopDownCanvasRenderer {
 
   render(now = performance.now()): void {
     this.drawGrid();
+
+    // Draw Trail
+    const size = this.cellSize();
+    const offsetX = (this.canvas.width - size * this.layout.size) / 2;
+    const offsetY = (this.canvas.height - size * this.layout.size) / 2;
+
+    if (this.trail.length > 1) {
+      this.ctx.save();
+      this.ctx.lineCap = "round";
+      this.ctx.lineJoin = "round";
+      this.ctx.lineWidth = size * 0.15;
+
+      for (let i = 0; i < this.trail.length - 1; i++) {
+        const p1 = this.trail[i];
+        const p2 = this.trail[i + 1];
+
+        // Decay alpha
+        p1.alpha *= 0.96;
+
+        const x1 = offsetX + p1.x * size + size / 2;
+        const y1 = offsetY + p1.y * size + size / 2;
+        const x2 = offsetX + p2.x * size + size / 2;
+        const y2 = offsetY + p2.y * size + size / 2;
+
+        this.ctx.beginPath();
+        this.ctx.moveTo(x1, y1);
+        this.ctx.lineTo(x2, y2);
+        this.ctx.strokeStyle = `rgba(255, 90, 54, ${p1.alpha * 0.4})`;
+        this.ctx.stroke();
+      }
+      this.ctx.restore();
+    }
+
     this.drawCollectibles(now);
+    this.drawHazardEffect(now);
 
     const [agentState, doneAgent] = this.interpolate(now, this.transition, this.visualState);
     if (doneAgent && this.transition) {

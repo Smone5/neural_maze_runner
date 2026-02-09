@@ -1,4 +1,4 @@
-import { MazeLayout } from "./maze_types";
+import { MazeChar, MazeLayout } from "./maze_types";
 import { DEFAULT_REWARDS, RewardConfig } from "./rewards";
 
 export type Direction = 0 | 1 | 2 | 3;
@@ -48,12 +48,20 @@ const DIR_VECTORS: Record<Direction, { dr: number; dc: number }> = {
 };
 
 const DIR_ORDER: Direction[] = [0, 1, 2, 3];
+const MAX_ICE_SLIDE_STEPS = 6;
+const WATER_PENALTY = -0.06;
+const FIRE_PENALTY = -0.14;
+const HOLE_PENALTY = -1.0;
+
+function isPathCell(cell: MazeChar): boolean {
+  return cell !== "#" && cell !== "H";
+}
 
 function isWalkable(layout: MazeLayout, row: number, col: number): boolean {
   if (row < 0 || col < 0 || row >= layout.size || col >= layout.size) {
     return false;
   }
-  return layout.grid[row]?.[col] !== "#";
+  return isPathCell(layout.grid[row]?.[col] ?? "#");
 }
 
 function key(row: number, col: number): string {
@@ -195,6 +203,29 @@ export class MazeEnv {
     return this.layout.grid[row][col] === "#";
   }
 
+  private tileAt(row: number, col: number): MazeChar {
+    if (row < 0 || col < 0 || row >= this.layout.size || col >= this.layout.size) {
+      return "#";
+    }
+    return this.layout.grid[row][col];
+  }
+
+  private slideForwardOnIce(state: EnvState): void {
+    const vec = DIR_VECTORS[state.dir];
+    for (let i = 0; i < MAX_ICE_SLIDE_STEPS; i += 1) {
+      if (this.tileAt(state.row, state.col) !== "I") {
+        return;
+      }
+      const nr = state.row + vec.dr;
+      const nc = state.col + vec.dc;
+      if (this.isBlocked(nr, nc)) {
+        return;
+      }
+      state.row = nr;
+      state.col = nc;
+    }
+  }
+
   private observe(state: EnvState): Observation {
     const forwardDir = state.dir;
     const leftDir = turnLeft(state.dir);
@@ -237,6 +268,7 @@ export class MazeEnv {
       } else {
         next.row = nr;
         next.col = nc;
+        this.slideForwardOnIce(next);
       }
     }
 
@@ -249,10 +281,21 @@ export class MazeEnv {
       reward += this.rewards.wallBumpPenalty;
     }
 
+    const landedTile = this.tileAt(next.row, next.col);
+    if (landedTile === "W") {
+      reward += WATER_PENALTY;
+    } else if (landedTile === "F") {
+      reward += FIRE_PENALTY;
+    } else if (landedTile === "H") {
+      reward += HOLE_PENALTY;
+    }
+
     let done = false;
     let success = false;
 
-    if (observation.at_goal) {
+    if (landedTile === "H") {
+      done = true;
+    } else if (observation.at_goal) {
       reward += this.rewards.goalReward;
       done = true;
       success = true;
