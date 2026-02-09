@@ -83,6 +83,7 @@ export class ThreeMazeViewer {
   private fpNearOffset = 0.08;
   private fpLookDistance = 2.6;
   private fpBasePitch = -0.28;
+  private fpYawCalibration = 0;
   private fpYawOffset = 0;
   private fpPitchOffset = 0;
   private fpLookDragging = false;
@@ -239,6 +240,11 @@ export class ThreeMazeViewer {
       this.resetFirstPersonLook();
       this.applyCamera(performance.now());
     }
+  }
+
+  setFirstPersonCalibration(yawRadians: number): void {
+    this.fpYawCalibration = yawRadians;
+    this.applyCamera(performance.now());
   }
 
   setZoomPercent(percent: number): void {
@@ -475,7 +481,7 @@ export class ThreeMazeViewer {
     if (this.viewMode === "first") {
       const vec = dirVec(this.cameraState.dir);
       const baseYaw = Math.atan2(vec.x, vec.z);
-      const yaw = baseYaw + this.fpYawOffset;
+      const yaw = baseYaw + this.fpYawCalibration + this.fpYawOffset;
       const pitch = Math.max(-0.72, Math.min(0.25, this.fpBasePitch + this.fpPitchOffset));
       const forwardX = Math.sin(yaw) * Math.cos(pitch);
       const forwardZ = Math.cos(yaw) * Math.cos(pitch);

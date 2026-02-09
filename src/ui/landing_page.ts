@@ -34,12 +34,21 @@ export class LandingPage {
         h2.className = "landing-subtitle";
 
         // 2. Main CTA
+        const ctaWrap = document.createElement("div");
+        ctaWrap.className = "landing-cta-wrap";
+
+        const startHint = document.createElement("div");
+        startHint.className = "btn-start-hint";
+        startHint.innerHTML = `<span>🚀 CLICK HERE TO BEGIN!</span>`;
+
         const startBtn = document.createElement("button");
         startBtn.className = "btn-start-mission";
         startBtn.innerHTML = `<span>INITIALIZE MISSION</span> <div class="btn-glare"></div>`;
         startBtn.onclick = () => {
             void this.handleStart();
         };
+
+        ctaWrap.append(startHint, startBtn);
 
         // 3. Features Grid
         const grid = document.createElement("div");
@@ -74,7 +83,7 @@ export class LandingPage {
             grid.appendChild(col);
         });
 
-        content.append(h1, h2, startBtn, grid);
+        content.append(h1, h2, ctaWrap, grid);
 
         // Footer / Credits
         const footer = document.createElement("div");

@@ -627,6 +627,14 @@ async function main(): Promise<void> {
     threeViewer.setAutoOrbit(true);
   }
 
+  function raceCameraYawCalibration(): number {
+    const mobileLike =
+      window.matchMedia("(max-width: 900px)").matches &&
+      window.matchMedia("(pointer: coarse)").matches;
+    // Calibrate first-person view for narrow mobile framing so hallway starts centered.
+    return mobileLike ? -0.52 : 0;
+  }
+
   function setAppMode(mode: AppMode) {
     currentMode = mode;
     modeTabs.forEach((tab, key) => {
@@ -733,6 +741,7 @@ async function main(): Promise<void> {
       // The racePanel (Scoreboard) is already in dom, we just ensure it's visible or placed
 
       if (threeViewer.ready) {
+        threeViewer.setFirstPersonCalibration(raceCameraYawCalibration());
         threeViewer.setViewMode("first");
         threeViewer.setFirstPersonTouchLookEnabled(raceTouchLookEnabled);
       }
@@ -2128,6 +2137,7 @@ async function main(): Promise<void> {
     topRenderer.setAgentState(state.kidEnv.state);
     topRenderer.setGhostState(state.aiEnv.state);
     if (threeViewer.ready) {
+      threeViewer.setFirstPersonCalibration(raceCameraYawCalibration());
       threeViewer.setAgentState(state.kidEnv.state);
       threeViewer.setGhostState(state.aiEnv.state);
       threeViewer.setViewMode("first");
