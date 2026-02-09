@@ -318,6 +318,11 @@ export interface ConceptMasterySummary {
   masteryPercent: number;
 }
 
+export interface ConceptPracticeResult {
+  conceptId: string;
+  masteryPercent: number;
+}
+
 export interface QuizQuestion {
   questionId: string;
   conceptId: string;
@@ -460,7 +465,7 @@ export class AdaptiveMissionCoach {
     const greedyAction = this.selectAction(stateKey, snapshot.attempts, false);
     const plan = this.planForAction(levelId, greedyAction, snapshot, status);
 
-    let coachTip = "Press Use Coach Plan, run Watch Learning, then compare results.";
+    let coachTip = "Press Start Watch Learning, then compare results in the dashboard.";
     if (status === "practicing") {
       coachTip = "Keep practicing. More tries help the agent connect actions to rewards.";
     } else if (status === "improving") {
@@ -643,6 +648,21 @@ export class AdaptiveMissionCoach {
         ? "Awesome effort. You are building real RL understanding."
         : "Nice try. You are learning, and a quick review will make the next round easier.",
       reviewLines,
+    };
+  }
+
+  isQuestionCorrect(questionId: string, chosenIndex: number): boolean {
+    const question = this.findQuestion(questionId);
+    if (!question) return false;
+    return chosenIndex === question.correctIndex;
+  }
+
+  submitConceptPractice(conceptId: string, correct: boolean): ConceptPracticeResult {
+    const concept = this.applyConceptOutcome(conceptId, correct);
+    this.save();
+    return {
+      conceptId,
+      masteryPercent: concept.masteryPercent,
     };
   }
 

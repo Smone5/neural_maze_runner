@@ -845,7 +845,10 @@ export class ScienceFairPanel {
     const support = EXPERTS[supportIndex];
     this.expertAvatar.innerHTML = lead.icon;
     this.expertAvatar.style.background = lead.color;
-    this.expertSpeech.innerHTML = `<strong>${lead.name} (${lead.role})</strong><p>${lead.message} Support: ${support.name}.</p>`;
+    this.expertSpeech.innerHTML = `
+      <span class="expert-name-tag">${lead.name} (${lead.role})</span>
+      <p class="expert-message-text">${lead.message} Support: ${support.name}.</p>
+    `;
   }
 
   public beginEpisodeObservationSession(totalCheckpoints: number): void {

@@ -1,6 +1,13 @@
 import { LEVELS, LevelDef } from "../core/levels";
 import { ProgressionManager } from "../core/progression";
-import { AdaptiveMissionCoach, QuizGrade, QuizQuestion } from "../core/adaptive_coach";
+import {
+  AdaptiveMissionCoach,
+  CheckInPrompt,
+  CheckInResult,
+  ConceptMasterySummary,
+  QuizGrade,
+  QuizQuestion,
+} from "../core/adaptive_coach";
 
 interface LessonContent {
   title: string;
@@ -22,6 +29,16 @@ interface MissionScrollState {
   labLeft: number;
   pageTop: number;
   pageLeft: number;
+}
+
+interface AiTutorQuestionPack {
+  conceptId: string;
+  conceptLabel: string;
+  teachBlurb: string;
+  question: string;
+  options: string[];
+  correctIndex: number;
+  hint: string;
 }
 
 const LESSONS: Record<number, LessonContent> = {
@@ -373,6 +390,11 @@ export class LearnPanel {
   private lessonQuestions: QuizQuestion[] = [];
   private lessonAnswers: Record<string, number> = {};
   private lessonGrade: QuizGrade | null = null;
+  private lessonFocusConceptIds: string[] = [];
+  private lessonFocusConceptLabels: string[] = [];
+  private reviewPrompt: CheckInPrompt | null = null;
+  private reviewSelected: number | null = null;
+  private reviewResult: CheckInResult | null = null;
 
   private finalQuestions: QuizQuestion[] = [];
   private finalAnswers: Record<string, number> = {};
@@ -497,6 +519,41 @@ export class LearnPanel {
     return !!this.lessonGrade && this.lessonGrade.total > 0 && this.lessonGrade.score === this.lessonGrade.total;
   }
 
+  private gradeLessonQuizIfAnswered(levelId: number): boolean {
+    if (this.lessonQuestions.length === 0) return false;
+    const submissions = this.lessonQuestions.map((q) => ({
+      questionId: q.questionId,
+      chosenIndex: this.lessonAnswers[q.questionId] ?? -1,
+    }));
+    const unanswered = submissions.some((s) => s.chosenIndex < 0);
+    if (unanswered) {
+      return false;
+    }
+    this.lessonGrade = this.coach.gradeQuestionSet(submissions, 1);
+    const missedByConcept = new Map<string, string>();
+    submissions.forEach((submission) => {
+      const question = this.lessonQuestions.find((q) => q.questionId === submission.questionId);
+      if (!question) return;
+      const selectedIndex = submission.chosenIndex;
+      const answerCorrect = selectedIndex >= 0 && this.coach.isQuestionCorrect(question.questionId, selectedIndex);
+      if (!answerCorrect) {
+        missedByConcept.set(question.conceptId, question.conceptLabel);
+      }
+    });
+    this.lessonFocusConceptIds = Array.from(missedByConcept.keys());
+    this.lessonFocusConceptLabels = Array.from(missedByConcept.values());
+    this.maybeCompleteMission(levelId);
+    return true;
+  }
+
+  private missionMasteryDisplay(levelId: number, insightMastery: number): number {
+    const missionComplete = this.progression.isCleared(levelId) || this.rewardedLessons.has(levelId);
+    if (missionComplete) {
+      return 100;
+    }
+    return insightMastery;
+  }
+
   private isTryChecklistComplete(levelId: number): boolean {
     const checks = this.tryItChecks[levelId] ?? [];
     return checks.length > 0 && checks.every(Boolean);
@@ -535,15 +592,33 @@ export class LearnPanel {
       .map((b) => `<span class="hero-badge-mini" title="${b}">🏅</span>`)
       .join("");
 
+    // Get weakest concept for tooltip
+    const mastery = this.coach
+      .getConceptMasterySummary()
+      .sort((a, b) => a.masteryPercent - b.masteryPercent);
+    const weakest = mastery[0];
+    const boostTooltip = weakest
+      ? `Power up your ${weakest.label} skills!`
+      : "Practice makes perfect!";
+
     header.innerHTML = `
       <div class="saga-header-content">
         <h1>🎓 Neural Maze Runner</h1>
         <div class="saga-stats">
           <div class="stat-pill">⭐ ${this.stars} Stars</div>
+          <button type="button" class="brain-boost-btn" title="${boostTooltip}">
+            <span class="boost-icon">🧠⚡</span>
+            <span class="boost-text">Brain Boost!</span>
+            <span class="boost-sparkle">✨</span>
+          </button>
           <div class="earned-badges-row">${badgesHtml}</div>
         </div>
       </div>
     `;
+
+    // Bind Brain Boost button
+    const boostBtn = header.querySelector(".brain-boost-btn") as HTMLButtonElement;
+    boostBtn.onclick = () => this.openAdaptiveReviewModal(true); // true = auto-try AI
 
     const sagaMap = this.renderSagaMap();
     this.root.append(header, sagaMap);
@@ -558,6 +633,345 @@ export class LearnPanel {
       reveal.classList.add("final-reveal-card");
       this.root.append(reveal, this.renderFinalQuizSection());
     }
+  }
+
+
+  private renderAdaptiveReviewLab(): HTMLElement {
+    const card = document.createElement("section");
+    card.className = "learn-card adaptive-review-card";
+
+    const mastery = this.coach
+      .getConceptMasterySummary()
+      .sort((a, b) => a.masteryPercent - b.masteryPercent)
+      .slice(0, 4);
+
+    const weakest = mastery[0];
+    const summary = weakest
+      ? `Weakest concept right now: ${weakest.label} (${weakest.masteryPercent}%).`
+      : "No mastery data yet.";
+
+    const title = document.createElement("h3");
+    title.textContent = "Adaptive Review Lab";
+
+    const subtitle = document.createElement("p");
+    subtitle.textContent = `${summary} Practice here anytime to relearn past topics.`;
+
+    const list = document.createElement("ul");
+    list.className = "adaptive-mastery-list";
+    for (const item of mastery) {
+      const li = document.createElement("li");
+      li.textContent = `${item.label}: ${item.masteryPercent}%`;
+      list.append(li);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "guided-action-row";
+
+    const startBtn = document.createElement("button");
+    startBtn.type = "button";
+    startBtn.className = "btn-check-lesson";
+    startBtn.textContent = "Start Adaptive Review";
+    startBtn.onclick = () => this.openAdaptiveReviewModal();
+
+    const note = document.createElement("p");
+    note.className = "guided-quiz-feedback";
+    note.textContent =
+      "Optional AI tutor mode: you can plug in ChatGPT via a backend endpoint to generate fresh explanations and question variants.";
+
+    actions.append(startBtn);
+    card.append(title, subtitle, list, actions, note);
+    return card;
+  }
+
+  private async requestAiTutorPack(prompt: CheckInPrompt): Promise<AiTutorQuestionPack> {
+    const response = await fetch("/api/tutor", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        conceptId: prompt.conceptId,
+        conceptLabel: prompt.conceptLabel,
+        confidencePercent: prompt.confidencePercent,
+        age: 11,
+      }),
+    });
+
+    if (!response.ok) {
+      const raw = await response.text();
+      let detail = raw;
+      try {
+        const parsed = JSON.parse(raw) as { error?: string };
+        detail = parsed.error ?? raw;
+      } catch {
+        // Keep raw body.
+      }
+      throw new Error(`AI tutor request failed (${response.status}): ${detail}`);
+    }
+
+    const payload = (await response.json()) as {
+      ok?: boolean;
+      pack?: AiTutorQuestionPack;
+      error?: string;
+    };
+
+    if (!payload.ok || !payload.pack) {
+      throw new Error(payload.error || "AI tutor response missing question pack.");
+    }
+
+    return payload.pack;
+  }
+
+  private openAdaptiveReviewModal(autoTryAi = false): void {
+    const overlay = document.createElement("div");
+    overlay.className = "mission-briefing-overlay brain-boost-overlay";
+
+    const modal = document.createElement("div");
+    modal.className = "mission-briefing-modal brain-boost-modal";
+    let reviewMode: "local" | "ai" = "local";
+    let aiPack: AiTutorQuestionPack | null = null;
+    let aiLoading = false;
+    let aiError = "";
+    let streak = 0;
+    let hintVisible = false;
+    let waitingForAiQuestion = false;
+
+    const close = () => {
+      overlay.remove();
+      this.render();
+    };
+
+    const refreshPrompt = (tryAi = false) => {
+      this.reviewPrompt = this.coach.getCheckInPrompt();
+      this.reviewSelected = null;
+      this.reviewResult = null;
+      reviewMode = "local";
+      aiPack = null;
+      aiLoading = tryAi;
+      aiError = "";
+      hintVisible = false;
+      waitingForAiQuestion = tryAi;
+      renderBody();
+      if (tryAi) {
+        void loadAiPack();
+      }
+    };
+
+    const loadAiPack = async () => {
+      if (!this.reviewPrompt) {
+        this.reviewPrompt = this.coach.getCheckInPrompt();
+      }
+      if (!this.reviewPrompt) {
+        aiLoading = false;
+        waitingForAiQuestion = false;
+        renderBody();
+        return;
+      }
+      aiLoading = true;
+      aiError = "";
+      this.reviewSelected = null;
+      this.reviewResult = null;
+      hintVisible = false;
+      renderBody();
+      try {
+        aiPack = await this.requestAiTutorPack(this.reviewPrompt);
+        reviewMode = "ai";
+        waitingForAiQuestion = false;
+      } catch (error) {
+        aiPack = null;
+        reviewMode = "local";
+        aiError = error instanceof Error ? error.message : "";
+        waitingForAiQuestion = false;
+        console.warn("AI tutor fallback to local mode:", aiError || error);
+      } finally {
+        aiLoading = false;
+        renderBody();
+      }
+    };
+
+    const renderBody = () => {
+      const prompt = this.reviewPrompt;
+      if (!prompt) return;
+      const showAiLoadingState = waitingForAiQuestion && aiLoading && !aiPack;
+      const activeConcept = reviewMode === "ai" && aiPack ? aiPack.conceptLabel : prompt.conceptLabel;
+      const activeConfidence = prompt.confidencePercent;
+      const activeQuestion = showAiLoadingState
+        ? "Building a fresh Brain Boost challenge for you..."
+        : reviewMode === "ai" && aiPack
+          ? aiPack.question
+          : prompt.prompt;
+      const activeOptions = showAiLoadingState
+        ? []
+        : reviewMode === "ai" && aiPack
+          ? aiPack.options
+          : prompt.options;
+      const teachBlurb = showAiLoadingState ? "" : reviewMode === "ai" && aiPack ? aiPack.teachBlurb : "";
+      const activeHint = showAiLoadingState ? "" : reviewMode === "ai" && aiPack ? aiPack.hint : "";
+      const hintBlock = activeHint
+        ? `
+            <button type="button" class="boost-hint-toggle-btn">
+              ${hintVisible ? "🙈 Hide Hint" : "💡 Show Hint"}
+            </button>
+            ${hintVisible ? `<p class="boost-hint">💡 Hint: ${activeHint}</p>` : ""}
+          `
+        : "";
+      const aiStatus = showAiLoadingState
+        ? `
+            <div class="boost-ai-loading">
+              <span class="boost-spinner" aria-hidden="true"></span>
+              <span>AI Coach is thinking...</span>
+            </div>
+          `
+        : "";
+      const aiErrorMessage = !showAiLoadingState && aiError
+        ? `<p class="boost-ai-error">AI Coach is unavailable right now. Switched to Practice Mode.</p>`
+        : "";
+
+      // Fun encouraging messages for kids
+      const modeEmoji = showAiLoadingState || reviewMode === "ai" ? "🤖" : "🎯";
+      const modeLabel = showAiLoadingState || reviewMode === "ai" ? "AI Coach Mode" : "Practice Mode";
+      const streakDisplay = streak > 0 ? `🔥 ${streak} in a row!` : "";
+
+      modal.innerHTML = `
+        <div class="briefing-header boost-header">
+          <div class="boost-title-row">
+            <span class="boost-title-icon">🧠⚡</span>
+            <h2>Brain Boost Arena</h2>
+          </div>
+          <div class="boost-streak">${streakDisplay}</div>
+          <button class="btn-close-briefing">✕</button>
+        </div>
+        <div class="briefing-body boost-body">
+          <div class="boost-topic-badge">
+            <span class="topic-emoji">${modeEmoji}</span>
+            <span class="topic-text">${activeConcept}</span>
+            <span class="topic-level">Level ${Math.floor(activeConfidence / 20) + 1}</span>
+          </div>
+          ${teachBlurb ? `<p class="boost-teach-blurb">${teachBlurb}</p>` : ""}
+          <div class="boost-question">
+            <p class="boost-question-text">${activeQuestion}</p>
+            ${aiStatus}
+            ${hintBlock}
+            ${aiErrorMessage}
+          </div>
+          <div class="boost-options"></div>
+          <div class="boost-feedback"></div>
+          <div class="boost-actions"></div>
+          <div class="boost-mode-indicator">
+            ${showAiLoadingState
+              ? `<span class="boost-loading-pill"><span class="boost-spinner" aria-hidden="true"></span>Loading AI Coach...</span>`
+              : `${modeEmoji} ${modeLabel}`}
+          </div>
+        </div>
+      `;
+
+      const closeBtn = modal.querySelector(".btn-close-briefing") as HTMLButtonElement;
+      closeBtn.type = "button";
+      closeBtn.onclick = close;
+
+      const hintToggleBtn = modal.querySelector(".boost-hint-toggle-btn") as HTMLButtonElement | null;
+      if (hintToggleBtn) {
+        hintToggleBtn.onclick = () => {
+          hintVisible = !hintVisible;
+          renderBody();
+        };
+      }
+
+      const options = modal.querySelector(".boost-options") as HTMLElement;
+      activeOptions.forEach((opt, index) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "boost-option-btn";
+        if (this.reviewSelected === index) {
+          btn.classList.add("selected");
+        }
+        if (this.reviewResult) {
+          const isCorrect = reviewMode === "ai" && aiPack
+            ? index === aiPack.correctIndex
+            : this.coach.isQuestionCorrect(prompt.questionId, index);
+          if (index === this.reviewSelected) {
+            btn.classList.add(this.reviewResult.correct ? "correct" : "wrong");
+          } else if (isCorrect) {
+            btn.classList.add("was-correct");
+          }
+        }
+        btn.textContent = opt;
+        btn.disabled = !!this.reviewResult;
+        btn.onclick = () => {
+          this.reviewSelected = index;
+          this.reviewResult = null;
+          renderBody();
+        };
+        options.append(btn);
+      });
+
+      const feedback = modal.querySelector(".boost-feedback") as HTMLElement;
+      if (this.reviewResult) {
+        const feedbackEmoji = this.reviewResult.correct ? "🎉" : "💪";
+        const feedbackMsg = this.reviewResult.correct
+          ? "AWESOME! You nailed it!"
+          : "Good try! Keep learning!";
+        feedback.innerHTML = `
+          <div class="boost-feedback-msg ${this.reviewResult.correct ? "correct" : "try-again"}">
+            <span class="feedback-emoji">${feedbackEmoji}</span>
+            <span class="feedback-text">${feedbackMsg}</span>
+          </div>
+        `;
+      }
+
+      const actions = modal.querySelector(".boost-actions") as HTMLElement;
+
+      if (showAiLoadingState) {
+        // Keep actions empty while waiting for AI, so local fallback does not flash first.
+      } else if (!this.reviewResult) {
+        const submit = document.createElement("button");
+        submit.type = "button";
+        submit.className = "boost-submit-btn";
+        submit.innerHTML = "🚀 Lock In Answer!";
+        submit.disabled = this.reviewSelected == null || aiLoading || showAiLoadingState;
+        submit.onclick = () => {
+          if (this.reviewSelected == null || !this.reviewPrompt) return;
+          if (reviewMode === "ai" && aiPack) {
+            const correct = this.reviewSelected === aiPack.correctIndex;
+            const result = this.coach.submitConceptPractice(aiPack.conceptId, correct);
+            this.reviewResult = {
+              correct,
+              message: correct ? "Awesome!" : "Keep trying!",
+              review: "",
+              conceptMasteryPercent: result.masteryPercent,
+            };
+            if (correct) streak++;
+            else streak = 0;
+          } else {
+            this.reviewResult = this.coach.submitCheckInAnswer(this.reviewPrompt.questionId, this.reviewSelected);
+            if (this.reviewResult.correct) streak++;
+            else streak = 0;
+          }
+          renderBody();
+        };
+        actions.append(submit);
+      } else {
+        const next = document.createElement("button");
+        next.type = "button";
+        next.className = "boost-next-btn";
+        next.innerHTML = "⚡ Next Challenge!";
+        next.onclick = () => refreshPrompt(true); // Always try AI for next question
+        actions.append(next);
+      }
+    };
+
+    overlay.onclick = (e) => {
+      if (e.target === overlay) close();
+    };
+
+    overlay.append(modal);
+    document.body.append(overlay);
+    requestAnimationFrame(() => {
+      overlay.classList.add("active");
+      modal.classList.add("active");
+    });
+
+    refreshPrompt(autoTryAi);
   }
 
   private renderMissionCockpit() {
@@ -705,6 +1119,7 @@ export class LearnPanel {
 
     const isCleared = this.progression.isCleared(lvl.id);
     const insight = this.coach.getMissionInsight(lvl.id);
+    const masteryPercent = this.missionMasteryDisplay(lvl.id, insight.masteryPercent);
 
     modal.innerHTML = `
       <div class="briefing-header">
@@ -722,7 +1137,7 @@ export class LearnPanel {
             </div>
             <div class="stat-box">
                 <label>Mastery</label>
-                <span>${insight.masteryPercent}%</span>
+                <span>${masteryPercent}%</span>
             </div>
         </div>
 
@@ -779,6 +1194,38 @@ export class LearnPanel {
   // Remove old renderMissionSection and renderCheckInSection
   // Keep renderGuidedLessonSection but maybe adjust styles
 
+  private renderMissionSteps(levelId: number): HTMLElement {
+    const quizDone = this.isLessonQuizPerfect();
+    const tryItDone = this.isTryChecklistComplete(levelId);
+    const missionComplete = this.progression.isCleared(levelId) || this.rewardedLessons.has(levelId);
+
+    const box = document.createElement("div");
+    box.className = "mission-steps-box";
+
+    // Step states
+    const step2Class = quizDone ? "step-done" : "step-current";
+    const step2Icon = quizDone ? "✅" : "👉";
+    const step2DoNow = !quizDone ? ' <span class="do-now">← DO THIS</span>' : "";
+
+    const step3Class = !quizDone ? "step-locked" : (tryItDone ? "step-done" : "step-current");
+    const step3Icon = tryItDone ? "✅" : (quizDone ? "👉" : "🔒");
+    const step3DoNow = quizDone && !tryItDone ? ' <span class="do-now">← DO THIS</span>' : "";
+
+    const step4Class = missionComplete ? "step-done" : "step-locked";
+    const step4Icon = missionComplete ? "🏆" : "🔒";
+
+    box.innerHTML = `
+      <h3>🎯 Your Mission Steps</h3>
+      <ol class="mission-steps-list">
+        <li class="step-done">✅ Read the lesson below</li>
+        <li class="${step2Class}">${step2Icon} Answer the Mini Quiz and press "Check Lesson Quiz"${step2DoNow}</li>
+        <li class="${step3Class}">${step3Icon} Complete the Try It checklist${step3DoNow}</li>
+        <li class="${step4Class}">${step4Icon} Mission Complete!</li>
+      </ol>
+    `;
+
+    return box;
+  }
 
   private renderGuidedLessonSection(levelId: number): HTMLElement {
     const lesson = LESSONS[levelId] ?? LESSONS[1];
@@ -786,6 +1233,8 @@ export class LearnPanel {
       this.lessonQuestions = this.coach.getQuestionsForConcepts(lesson.conceptIds, 2);
       this.lessonAnswers = {};
       this.lessonGrade = null;
+      this.lessonFocusConceptIds = [];
+      this.lessonFocusConceptLabels = [];
     }
     if (!this.tryItChecks[levelId] || this.tryItChecks[levelId].length !== lesson.tryIt.length) {
       this.tryItChecks[levelId] = Array.from({ length: lesson.tryIt.length }, () => false);
@@ -1065,12 +1514,8 @@ export class LearnPanel {
     submitBtn.className = "btn-check-lesson";
     submitBtn.textContent = "Check Lesson Quiz";
     submitBtn.onclick = () => {
-      const submissions = this.lessonQuestions.map((q) => ({
-        questionId: q.questionId,
-        chosenIndex: this.lessonAnswers[q.questionId] ?? -1,
-      }));
-      const unanswered = submissions.some((s) => s.chosenIndex < 0);
-      if (unanswered) {
+      const graded = this.gradeLessonQuizIfAnswered(levelId);
+      if (!graded) {
         this.lessonGrade = {
           score: 0,
           total: this.lessonQuestions.length,
@@ -1081,9 +1526,6 @@ export class LearnPanel {
         this.render();
         return;
       }
-
-      this.lessonGrade = this.coach.gradeQuestionSet(submissions, 1);
-      this.maybeCompleteMission(levelId);
       this.render();
     };
 
@@ -1096,7 +1538,31 @@ export class LearnPanel {
     actionRow.append(submitBtn, closeBtn);
     quizWrap.append(quizFeedback, actionRow);
 
+    if (this.lessonGrade && this.lessonFocusConceptIds.length > 0) {
+      const focusWrap = document.createElement("div");
+      focusWrap.className = "guided-action-row";
+      const focusHint = document.createElement("p");
+      focusHint.className = "guided-quiz-feedback needs-review";
+      focusHint.textContent = `Coach focus: ${this.lessonFocusConceptLabels.join(", ")}.`;
+      const focusBtn = document.createElement("button");
+      focusBtn.type = "button";
+      focusBtn.className = "btn-check-lesson";
+      focusBtn.textContent = "Retry Missed Concepts";
+      focusBtn.onclick = () => {
+        const count = Math.max(2, this.lessonFocusConceptIds.length);
+        this.lessonQuestions = this.coach.getQuestionsForConcepts(this.lessonFocusConceptIds, count);
+        this.lessonAnswers = {};
+        this.lessonGrade = null;
+        this.render();
+      };
+      focusWrap.append(focusBtn);
+      quizWrap.append(focusHint, focusWrap);
+    }
+
+    const missionSteps = this.renderMissionSteps(levelId);
+
     section.append(
+      missionSteps,
       title,
       hook,
       media,
@@ -1235,15 +1701,25 @@ export class LearnPanel {
     this.lessonQuestions = this.coach.getQuestionsForConcepts(lesson.conceptIds, 2);
     this.lessonAnswers = {};
     this.lessonGrade = null;
+    this.lessonFocusConceptIds = [];
+    this.lessonFocusConceptLabels = [];
     this.render();
   }
 
   private exitToSagaMap(): void {
+    const levelId = this.activeLessonId;
+    if (levelId != null && !this.progression.isCleared(levelId)) {
+      // If the student answered the quiz but forgot to press "Check Lesson Quiz",
+      // auto-grade on exit so completion is not lost.
+      this.gradeLessonQuizIfAnswered(levelId);
+    }
     this.activeLessonId = null;
     this.viewMode = "SAGA";
     this.lessonQuestions = [];
     this.lessonAnswers = {};
     this.lessonGrade = null;
+    this.lessonFocusConceptIds = [];
+    this.lessonFocusConceptLabels = [];
     this.onMissionExit?.();
     this.render();
   }
