@@ -422,6 +422,7 @@ export class LearnPanel {
   private viewerPanel?: HTMLElement;
   private mapPanel?: HTMLElement;
   private dashboard?: Dashboard;
+  private openExperimentModal?: () => void;
 
   private static REWARD_KEY = "rl_school_rewards_v1";
   private static AI_QUESTION_HISTORY_LIMIT = 8;
@@ -595,6 +596,99 @@ export class LearnPanel {
       this.onMissionAward?.(levelId, level.badge);
     }
     return true;
+  }
+
+  private checklistPresetFor(item: string): {
+    algorithm?: string;
+    episodes?: number;
+    speed?: "slow" | "normal" | "fast" | "turbo";
+    autoRun: boolean;
+    autoScience: boolean;
+    pauseAfterRun: boolean;
+  } {
+    const text = item.toLowerCase();
+    const preset: {
+      algorithm?: string;
+      episodes?: number;
+      speed?: "slow" | "normal" | "fast" | "turbo";
+      autoRun: boolean;
+      autoScience: boolean;
+      pauseAfterRun: boolean;
+    } = {
+      autoRun: /(run|watch learning|press watch learning)/.test(text),
+      autoScience: text.includes("science test"),
+      pauseAfterRun: text.includes("pause mid-run"),
+    };
+
+    if (
+      text.includes("switch algorithm to random") ||
+      text.includes("switch to random") ||
+      text.includes("try 'random'") ||
+      text.includes("try random")
+    ) {
+      preset.algorithm = "Random";
+    } else if (text.includes("switch back to q-learning") || text.includes("run q-learning")) {
+      preset.algorithm = "Q-learning";
+    } else if (text.includes("try expected sarsa")) {
+      preset.algorithm = "Expected SARSA";
+    } else if (text.includes("double q-learning")) {
+      preset.algorithm = "Double Q-learning";
+    } else if (text.includes("try sarsa")) {
+      preset.algorithm = "SARSA";
+    } else if (text.includes("q-learning")) {
+      preset.algorithm = "Q-learning";
+    }
+
+    if (text.includes("set speed to slow")) {
+      preset.speed = "slow";
+    } else if (text.includes("speed to fast")) {
+      preset.speed = "fast";
+    } else if (text.includes("speed to turbo")) {
+      preset.speed = "turbo";
+    } else if (text.includes("speed to normal")) {
+      preset.speed = "normal";
+    }
+
+    const episodesMatch = text.match(/(\d+)\s*episodes?/);
+    if (episodesMatch) {
+      preset.episodes = Math.max(1, Math.min(500, Number(episodesMatch[1])));
+    }
+
+    return preset;
+  }
+
+  private launchChecklistExperiment(item: string): void {
+    if (!this.controls) return;
+    const controls = this.controls;
+    const preset = this.checklistPresetFor(item);
+
+    if (preset.algorithm) {
+      controls.algorithmSelect.value = preset.algorithm;
+    }
+    if (preset.episodes) {
+      controls.episodesInput.value = String(preset.episodes);
+    }
+    if (preset.speed) {
+      controls.speedSelect.value = preset.speed;
+      controls.speedSelect.dispatchEvent(new Event("change"));
+    }
+
+    this.openExperimentModal?.();
+
+    requestAnimationFrame(() => {
+      if (preset.autoScience && !controls.runExperimentBtn.disabled) {
+        controls.runExperimentBtn.click();
+      } else if (preset.autoRun && !controls.runDemoBtn.disabled) {
+        controls.runDemoBtn.click();
+      }
+      if (preset.pauseAfterRun) {
+        setTimeout(() => {
+          if (!controls.pauseBtn.disabled) {
+            controls.pauseBtn.click();
+          }
+        }, 900);
+      }
+    });
   }
 
   private renderSagaView() {
@@ -1091,7 +1185,15 @@ export class LearnPanel {
     backBtn.className = "btn-back-map";
     backBtn.innerHTML = "⬅ Back to Map";
     backBtn.onclick = () => this.exitToSagaMap();
-    navRow.append(backBtn);
+
+    const openExperimentBtn = document.createElement("button");
+    openExperimentBtn.type = "button";
+    openExperimentBtn.className = "btn-open-experiment-modal";
+    openExperimentBtn.textContent = "🧪 Open Experiment";
+    openExperimentBtn.setAttribute("aria-haspopup", "dialog");
+    openExperimentBtn.setAttribute("aria-expanded", "false");
+
+    navRow.append(backBtn, openExperimentBtn);
     sidebar.append(navRow);
 
     // Render the actual lesson content into sidebar
@@ -1099,8 +1201,31 @@ export class LearnPanel {
     sidebar.append(lessonContent);
 
     // 2. Lab Area (Right side)
+    const experimentBackdrop = document.createElement("button");
+    experimentBackdrop.type = "button";
+    experimentBackdrop.className = "mobile-experiment-backdrop";
+    experimentBackdrop.setAttribute("aria-label", "Close experiment panel");
+
     const labArea = document.createElement("div");
     labArea.className = "cockpit-lab";
+    labArea.setAttribute("role", "dialog");
+    labArea.setAttribute("aria-modal", "true");
+    labArea.setAttribute("aria-label", "Mission experiment panel");
+
+    const mobileExperimentHeader = document.createElement("div");
+    mobileExperimentHeader.className = "mobile-experiment-header";
+
+    const mobileExperimentTitle = document.createElement("strong");
+    mobileExperimentTitle.textContent = "Experiment";
+
+    const closeExperimentBtn = document.createElement("button");
+    closeExperimentBtn.type = "button";
+    closeExperimentBtn.className = "btn-close-experiment-modal";
+    closeExperimentBtn.textContent = "Close";
+    mobileExperimentHeader.append(mobileExperimentTitle, closeExperimentBtn);
+
+    const experimentBody = document.createElement("div");
+    experimentBody.className = "cockpit-experiment-body";
 
     const viewRow = document.createElement("div");
     viewRow.className = "cockpit-view-row";
@@ -1118,7 +1243,7 @@ export class LearnPanel {
       viewRow.append(mapSlot);
     }
     if (viewRow.childElementCount > 0) {
-      labArea.append(viewRow);
+      experimentBody.append(viewRow);
     }
     if (this.dashboard) {
       this.dashboard.setCompactMode(true);
@@ -1128,10 +1253,11 @@ export class LearnPanel {
       const dashboardSlot = document.createElement("div");
       dashboardSlot.className = "cockpit-dashboard";
       dashboardSlot.append(this.dashboard.root);
-      labArea.append(dashboardSlot);
+      experimentBody.append(dashboardSlot);
     }
     if (this.controls) {
       this.controls.root.style.display = "block"; // Ensure visible
+      this.controls.root.classList.add("mission-controls-panel");
 
       // Onboarding Pulse for Mission 1
       const isCleared = this.progression.isCleared(levelId);
@@ -1143,10 +1269,41 @@ export class LearnPanel {
         this.controls.runDemoBtn.classList.toggle("guide-pulse", levelId === 1 && !isCleared);
       }
 
-      labArea.append(this.controls.root);
+      experimentBody.append(this.controls.root);
     }
 
-    cockpit.append(sidebar, labArea);
+    labArea.append(mobileExperimentHeader, experimentBody);
+
+    const setExperimentModalOpen = (open: boolean) => {
+      cockpit.classList.toggle("experiment-modal-open", open);
+      openExperimentBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) {
+        requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+      }
+    };
+
+    this.openExperimentModal = () => setExperimentModalOpen(true);
+
+    const stopAndCloseExperiment = () => {
+      if (this.controls) {
+        const resetLabel = (this.controls.resetBtn.textContent || "").trim().toLowerCase();
+        if (resetLabel === "stop") {
+          this.controls.resetBtn.click();
+        }
+      }
+      setExperimentModalOpen(false);
+    };
+
+    openExperimentBtn.onclick = () => setExperimentModalOpen(true);
+    closeExperimentBtn.onclick = () => stopAndCloseExperiment();
+    experimentBackdrop.onclick = () => stopAndCloseExperiment();
+    labArea.onclick = (event) => {
+      if (event.target === labArea) {
+        stopAndCloseExperiment();
+      }
+    };
+
+    cockpit.append(sidebar, experimentBackdrop, labArea);
     this.root.append(cockpit);
 
     // Trigger resize for 3D view
@@ -1422,14 +1579,18 @@ export class LearnPanel {
 
     const tryHint = document.createElement("p");
     tryHint.className = "lesson-try-hint";
-    tryHint.textContent = "Check items as you try them. No pressure. This is practice, not a test.";
+    tryHint.textContent = "Check items as you try them. Tap Launch on any row to auto-open the experiment with matching setup.";
     tryWrap.append(tryHint);
 
     const tryList = document.createElement("div");
     tryList.className = "lesson-try-list";
     lesson.tryIt.forEach((item, idx) => {
-      const row = document.createElement("label");
+      const row = document.createElement("div");
       row.className = "lesson-try-item";
+
+      const main = document.createElement("label");
+      main.className = "lesson-try-main";
+
       const cb = document.createElement("input");
       cb.type = "checkbox";
       cb.checked = !!this.tryItChecks[levelId][idx];
@@ -1546,7 +1707,20 @@ export class LearnPanel {
         text.textContent = item;
       }
 
-      row.append(cb, text);
+      main.append(cb, text);
+
+      const launchBtn = document.createElement("button");
+      launchBtn.type = "button";
+      launchBtn.className = "btn-try-launch";
+      launchBtn.textContent = "Launch";
+      launchBtn.title = "Open experiment with this checklist setup";
+      launchBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.launchChecklistExperiment(item);
+      };
+
+      row.append(main, launchBtn);
       tryList.append(row);
     });
     tryWrap.append(tryList);
@@ -1836,6 +2010,7 @@ export class LearnPanel {
     this.lessonGrade = null;
     this.lessonFocusConceptIds = [];
     this.lessonFocusConceptLabels = [];
+    this.openExperimentModal = undefined;
     this.onMissionExit?.();
     this.render();
   }

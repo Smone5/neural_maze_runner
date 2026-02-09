@@ -628,11 +628,8 @@ async function main(): Promise<void> {
   }
 
   function raceCameraYawCalibration(): number {
-    const mobileLike =
-      window.matchMedia("(max-width: 900px)").matches &&
-      window.matchMedia("(pointer: coarse)").matches;
-    // Calibrate first-person view for narrow mobile framing so hallway starts centered.
-    return mobileLike ? -0.52 : 0;
+    // Keep race first-person heading aligned with the tactical 2D map on all devices.
+    return 0;
   }
 
   function setAppMode(mode: AppMode) {

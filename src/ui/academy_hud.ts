@@ -21,10 +21,11 @@ export class AcademyHUD {
     render() {
         this.root.innerHTML = "";
         if (!this.currentMission) {
-            this.root.style.display = "none";
+            this.root.hidden = true;
             return;
         }
-        this.root.style.display = "flex";
+        this.root.hidden = false;
+        this.root.style.display = "";
 
         const stats = this.coach.getCoachIronyStats();
         const insight = this.coach.getMissionInsight(this.currentMission.id);

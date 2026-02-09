@@ -134,7 +134,13 @@ export class ThreeMazeViewer {
       return;
     }
 
-    this.container.appendChild(this.renderer.domElement);
+    const canvasEl = this.renderer.domElement;
+    // Keep the display size locked to the container. Without this, high-DPI
+    // mobile screens can show a clipped oversized first-person view.
+    canvasEl.style.width = "100%";
+    canvasEl.style.height = "100%";
+    canvasEl.style.display = "block";
+    this.container.appendChild(canvasEl);
 
     // Lighting
     const hemi = new HemisphereLight(0xffffff, 0x080820, 0.4); // Softer sky

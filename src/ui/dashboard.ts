@@ -19,7 +19,7 @@ export interface DashboardStep {
 export class Dashboard {
   readonly root: HTMLElement;
   private metricsList: HTMLUListElement;
-  private kidGuide: HTMLDivElement;
+  private kidGuide: HTMLDetailsElement;
   private returnChart: Chart;
   private compactMode = false;
 
@@ -45,10 +45,10 @@ export class Dashboard {
     this.metricsList = document.createElement("ul");
     this.metricsList.className = "metrics-list";
 
-    this.kidGuide = document.createElement("div");
+    this.kidGuide = document.createElement("details");
     this.kidGuide.className = "dashboard-kid-guide";
     this.kidGuide.innerHTML = [
-      `<p><strong>What this means (Mission 1):</strong></p>`,
+      `<summary>What this means (Mission 1)</summary>`,
       `<ul>`,
       `<li><strong>Try</strong> = one full robot attempt (start to finish).</li>`,
       `<li><strong>Move</strong> = how many moves it has made in this try.</li>`,
@@ -61,12 +61,15 @@ export class Dashboard {
       `<li><strong>Note:</strong> Dashboard points are shown in easy scale (reward x 100). This does not change learning.</li>`,
       `</ul>`,
     ].join("");
+    this.kidGuide.open = true;
 
     const returnCanvas = document.createElement("canvas");
     returnCanvas.className = "dashboard-return-chart";
     returnCanvas.height = 220;
 
     this.root.append(heading, this.kidGuide, this.metricsList, returnCanvas);
+    this.applyGuideCollapsedState();
+    window.addEventListener("resize", () => this.applyGuideCollapsedState());
 
     this.returnChart = new Chart(returnCanvas, {
       type: "line",
@@ -157,6 +160,13 @@ export class Dashboard {
   setCompactMode(enabled: boolean): void {
     this.compactMode = enabled;
     this.root.classList.toggle("dashboard-compact", enabled);
+    this.applyGuideCollapsedState();
+  }
+
+  private applyGuideCollapsedState(): void {
+    const mobileLike = window.matchMedia("(max-width: 900px)").matches;
+    const shouldCollapse = this.compactMode && mobileLike;
+    this.kidGuide.open = !shouldCollapse;
   }
 
   pushEpisodeReturn(episode: number, episodeReturn: number): void {

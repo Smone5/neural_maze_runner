@@ -933,6 +933,7 @@ export class ScienceFairPanel {
       const name = document.createElement("strong");
       name.textContent = s.algorithm;
       const outcome = document.createElement("span");
+      outcome.className = "snap-outcome";
       outcome.textContent = s.success ? "MISSION COMPLETE" : "MISSION FAILED";
       meta.append(name, outcome);
 
