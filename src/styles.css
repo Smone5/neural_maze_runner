@@ -5905,6 +5905,60 @@ select.data-entry-input {
   }
 }
 
+.saga-node.guide-pulse {
+  animation: nodePulse 2s infinite ease-in-out;
+  border-color: var(--accent-2) !important;
+  box-shadow: 0 0 20px var(--accent-2-glow);
+  z-index: 10;
+}
+
+@keyframes nodePulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 10px var(--accent-2-glow);
+  }
+
+  50% {
+    transform: scale(1.15);
+    box-shadow: 0 0 30px var(--accent-2-glow), 0 0 0 10px rgba(0, 240, 255, 0.1);
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 10px var(--accent-2-glow);
+  }
+}
+
+.next-mission-hint {
+  position: absolute;
+  top: -50px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  color: var(--accent-2);
+  text-shadow: 0 0 10px var(--accent-2-glow);
+  animation: floating 3s infinite ease-in-out;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--accent-2);
+  white-space: nowrap;
+  z-index: 20;
+}
+
+.next-mission-hint::after {
+  content: "";
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 5px;
+  border-style: solid;
+  border-color: var(--accent-2) transparent transparent transparent;
+}
+
 .btn-primary-action.guide-pulse {
   animation: btnPulse 2s infinite;
   border-color: var(--accent-2) !important;

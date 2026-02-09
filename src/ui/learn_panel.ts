@@ -859,8 +859,8 @@ export class LearnPanel {
           <div class="boost-actions"></div>
           <div class="boost-mode-indicator">
             ${showAiLoadingState
-              ? `<span class="boost-loading-pill"><span class="boost-spinner" aria-hidden="true"></span>Loading AI Coach...</span>`
-              : `${modeEmoji} ${modeLabel}`}
+          ? `<span class="boost-loading-pill"><span class="boost-spinner" aria-hidden="true"></span>Loading AI Coach...</span>`
+          : `${modeEmoji} ${modeLabel}`}
           </div>
         </div>
       `;
@@ -1070,13 +1070,24 @@ export class LearnPanel {
     const pathContainer = document.createElement("div");
     pathContainer.className = "saga-path";
 
+    let nextMissionId: number | null = null;
+    for (const lvl of LEVELS) {
+      if (this.progression.isUnlocked(lvl.id) && !this.progression.isCleared(lvl.id)) {
+        nextMissionId = lvl.id;
+        break;
+      }
+    }
+
     LEVELS.forEach((lvl: LevelDef, index: number) => {
       const isUnlocked = this.progression.isUnlocked(lvl.id);
       const isCleared = this.progression.isCleared(lvl.id);
-      const insight = this.coach.getMissionInsight(lvl.id);
+      const isNext = lvl.id === nextMissionId;
 
       const node = document.createElement("div");
-      node.className = "saga-node" + (isUnlocked ? " unlocked" : " locked") + (isCleared ? " cleared" : "");
+      node.className = "saga-node" +
+        (isUnlocked ? " unlocked" : " locked") +
+        (isCleared ? " cleared" : "") +
+        (isNext ? " guide-pulse" : "");
 
       // Position logic for winding path (css will handle zigzag)
       // Visuals
@@ -1090,6 +1101,13 @@ export class LearnPanel {
            </div>
          `;
         node.onclick = () => this.openMissionBriefing(lvl);
+
+        if (isNext) {
+          const hint = document.createElement("div");
+          hint.className = "next-mission-hint";
+          hint.innerHTML = `<span>🎯 START HERE!</span>`;
+          node.appendChild(hint);
+        }
       }
 
       // Connector line (except last)
