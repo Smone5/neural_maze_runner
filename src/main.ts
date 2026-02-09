@@ -1,6 +1,6 @@
 import "./styles.css";
 
-import { ACTION_NAMES, Action, MazeEnv, stateToKey } from "./core/env";
+import { ACTION_NAMES, Action, MazeEnv, initialDirectionForMaze, stateToKey } from "./core/env";
 import { analyzeMaze } from "./core/maze_analyze";
 import { RawRow, summarizeExperiment, toCsv } from "./core/export";
 import { decodeMazeFromUrl, encodeMazeToShareUrl, loadBuiltinMazes } from "./core/maze_io";
@@ -528,8 +528,43 @@ async function main(): Promise<void> {
   const raceTitle = document.createElement("h3");
   raceTitle.textContent = "Race Challenge (Best of 3)";
   const raceHint = document.createElement("p");
+  raceHint.className = "race-hint";
   raceHint.textContent =
-    "Use W/ArrowUp to go, A/ArrowLeft to turn left, D/ArrowRight to turn right. Kid gets a 1.5-second head start.";
+    "Desktop: W/ArrowUp = go, A/ArrowLeft = left, D/ArrowRight = right, right-click + drag = look. Mobile: use touch buttons. Turn Look On only when you want to drag camera. Kid gets a 1.5-second head start.";
+  const raceTouchControls = document.createElement("div");
+  raceTouchControls.className = "race-touch-controls";
+  raceTouchControls.setAttribute("aria-label", "Mobile race controls");
+  const raceLeftBtn = document.createElement("button");
+  raceLeftBtn.type = "button";
+  raceLeftBtn.className = "race-touch-btn";
+  raceLeftBtn.textContent = "↶ Left";
+  const raceForwardBtn = document.createElement("button");
+  raceForwardBtn.type = "button";
+  raceForwardBtn.className = "race-touch-btn race-touch-btn-forward";
+  raceForwardBtn.textContent = "↑ Go";
+  const raceRightBtn = document.createElement("button");
+  raceRightBtn.type = "button";
+  raceRightBtn.className = "race-touch-btn";
+  raceRightBtn.textContent = "↷ Right";
+  const raceLookBtn = document.createElement("button");
+  raceLookBtn.type = "button";
+  raceLookBtn.className = "race-touch-btn race-touch-btn-look";
+  raceLookBtn.textContent = "👁 Look: Off";
+  raceTouchControls.append(raceLeftBtn, raceForwardBtn, raceRightBtn, raceLookBtn);
+  raceLeftBtn.onclick = () => onKidAction(1);
+  raceForwardBtn.onclick = () => onKidAction(0);
+  raceRightBtn.onclick = () => onKidAction(2);
+  let raceTouchLookEnabled = false;
+  const setRaceTouchLook = (enabled: boolean) => {
+    raceTouchLookEnabled = enabled;
+    raceLookBtn.textContent = enabled ? "👁 Look: On (drag view)" : "👁 Look: Off";
+    raceLookBtn.classList.toggle("active", enabled);
+    if (threeViewer.ready) {
+      threeViewer.setFirstPersonTouchLookEnabled(enabled);
+    }
+  };
+  raceLookBtn.onclick = () => setRaceTouchLook(!raceTouchLookEnabled);
+  setRaceTouchLook(false);
   const raceMissionField = document.createElement("label");
   raceMissionField.className = "race-mission-field";
   const raceMissionLabel = document.createElement("span");
@@ -549,6 +584,7 @@ async function main(): Promise<void> {
   raceCountdown.className = "race-countdown";
   const raceScore = document.createElement("div");
   raceScore.className = "race-score";
+  raceThreeSlot.append(raceTouchControls);
   racePanel.append(raceTitle, raceHint, raceMissionField, raceActions, racePolicyInfo, raceCountdown, raceScore);
   challengeContainer.append(raceViewPanel, racePanel);
 
@@ -670,9 +706,21 @@ async function main(): Promise<void> {
       arcadeHero.append(threeControls);
       resizeTopRenderer();
     } else if (mode === "CHALLENGE") {
+      setRaceTouchLook(false);
       // Keep Challenge visuals aligned with the selected mission option.
       if (runMode !== "race") {
         applySelectedChallengeMaze(false);
+        const previewState = {
+          row: currentMaze.start.row,
+          col: currentMaze.start.col,
+          dir: initialDirectionForMaze(currentMaze),
+        } as const;
+        topRenderer.setAgentState(previewState);
+        topRenderer.clearGhost();
+        if (threeViewer.ready) {
+          threeViewer.setAgentState(previewState);
+          threeViewer.clearGhost();
+        }
       }
 
       // Background: 3D View (Full Cockpit Backdrop)
@@ -686,6 +734,7 @@ async function main(): Promise<void> {
 
       if (threeViewer.ready) {
         threeViewer.setViewMode("first");
+        threeViewer.setFirstPersonTouchLookEnabled(raceTouchLookEnabled);
       }
 
       setTimeout(() => {
@@ -1101,7 +1150,11 @@ async function main(): Promise<void> {
   }
 
   function syncRenderersToMaze(maze: MazeLayout): void {
-    const startState = { row: maze.start.row, col: maze.start.col, dir: 1 } as const;
+    const startState = {
+      row: maze.start.row,
+      col: maze.start.col,
+      dir: initialDirectionForMaze(maze),
+    } as const;
     topRenderer.setLayout(maze);
     topRenderer.setAgentState(startState);
     topRenderer.clearGhost();
@@ -1146,6 +1199,7 @@ async function main(): Promise<void> {
     sciencePanel.cancelPendingEpisodeObservation();
     sound.stopAmbient();
     raceCountdown.textContent = "";
+    setRaceTouchLook(false);
     runMode = "idle";
     paused = false;
     raceState = null;
@@ -1538,7 +1592,11 @@ async function main(): Promise<void> {
       const height = canvas.clientHeight || canvas.height || 300;
       renderer.resize(width, height);
       renderer.setLayout(currentMaze);
-      renderer.setAgentState({ row: currentMaze.start.row, col: currentMaze.start.col, dir: 1 });
+      renderer.setAgentState({
+        row: currentMaze.start.row,
+        col: currentMaze.start.col,
+        dir: initialDirectionForMaze(currentMaze),
+      });
       experimentPanel.setLiveComparisonMessage(index, `${algorithm}: waiting for trial 1.`);
       return renderer;
     });
@@ -1567,7 +1625,11 @@ async function main(): Promise<void> {
           if (displayIndex >= 0) {
             const renderer = liveRenderers[displayIndex];
             renderer?.setLayout(currentMaze);
-            renderer?.setAgentState({ row: currentMaze.start.row, col: currentMaze.start.col, dir: 1 });
+            renderer?.setAgentState({
+              row: currentMaze.start.row,
+              col: currentMaze.start.col,
+              dir: initialDirectionForMaze(currentMaze),
+            });
             experimentPanel.setLiveComparisonMessage(displayIndex, `${algorithm}: trial ${trial}/${trials} ready.`);
           }
           return {
@@ -2024,6 +2086,7 @@ async function main(): Promise<void> {
   function endTournament(state: RaceState): void {
     sound.stopAmbient();
     raceCountdown.textContent = "";
+    setRaceTouchLook(false);
     const finalText =
       state.kidWins > state.aiWins
         ? "FINAL RESULT: Student wins the Great Escape! Best-of-3."
@@ -2049,6 +2112,7 @@ async function main(): Promise<void> {
     state.active = false;
     state.betweenRounds = false;
     state.countdownActive = true;
+    setRaceTouchLook(false);
     state.startAt = performance.now();
     state.kidSteps = 0;
     state.aiSteps = 0;
@@ -2066,6 +2130,7 @@ async function main(): Promise<void> {
     if (threeViewer.ready) {
       threeViewer.setAgentState(state.kidEnv.state);
       threeViewer.setGhostState(state.aiEnv.state);
+      threeViewer.setViewMode("first");
     }
 
     // setJourney("race", `Race round ${state.round}/${state.totalRounds} is starting.`);

@@ -82,6 +82,12 @@ export class ThreeMazeViewer {
   private fpEyeHeight = 0.6;
   private fpNearOffset = 0.08;
   private fpLookDistance = 2.6;
+  private fpBasePitch = -0.28;
+  private fpYawOffset = 0;
+  private fpPitchOffset = 0;
+  private fpLookDragging = false;
+  private fpLookPointerId: number | null = null;
+  private fpTouchLookEnabled = false;
 
   readonly ready: boolean;
 
@@ -217,9 +223,22 @@ export class ThreeMazeViewer {
   setViewMode(mode: ThreeViewMode): void {
     this.viewMode = mode;
     const firstPerson = mode === "first";
+    if (firstPerson) {
+      this.resetFirstPersonLook();
+    }
     // Hide the player's own meshes in first person so they don't block view.
     this.agentGroup.visible = !firstPerson;
     this.applyCamera(performance.now());
+  }
+
+  setFirstPersonTouchLookEnabled(enabled: boolean): void {
+    this.fpTouchLookEnabled = enabled;
+    if (!enabled) {
+      this.fpLookDragging = false;
+      this.fpLookPointerId = null;
+      this.resetFirstPersonLook();
+      this.applyCamera(performance.now());
+    }
   }
 
   setZoomPercent(percent: number): void {
@@ -288,9 +307,28 @@ export class ThreeMazeViewer {
   private bindCameraInput(): void {
     const el = this.renderer.domElement;
     el.style.touchAction = "none";
+    el.addEventListener("contextmenu", (event) => {
+      if (this.viewMode === "first") {
+        event.preventDefault();
+      }
+    });
 
     el.addEventListener("pointerdown", (event) => {
       if (this.viewMode === "first") {
+        const isTouchLike = event.pointerType === "touch" || event.pointerType === "pen";
+        const allowLook = isTouchLike ? this.fpTouchLookEnabled : event.button === 2;
+        if (!allowLook) {
+          return;
+        }
+        this.fpLookDragging = true;
+        this.fpLookPointerId = event.pointerId;
+        this.dragX = event.clientX;
+        this.dragY = event.clientY;
+        try {
+          el.setPointerCapture(event.pointerId);
+        } catch {
+          // ignore capture issues
+        }
         return;
       }
       this.dragging = true;
@@ -305,7 +343,19 @@ export class ThreeMazeViewer {
     });
 
     el.addEventListener("pointermove", (event) => {
-      if (!this.dragging || this.viewMode === "first") {
+      if (this.viewMode === "first") {
+        if (!this.fpLookDragging || (this.fpLookPointerId != null && event.pointerId !== this.fpLookPointerId)) {
+          return;
+        }
+        const dx = event.clientX - this.dragX;
+        const dy = event.clientY - this.dragY;
+        this.dragX = event.clientX;
+        this.dragY = event.clientY;
+        this.fpYawOffset -= dx * 0.006;
+        this.fpPitchOffset = Math.max(-0.32, Math.min(0.32, this.fpPitchOffset - dy * 0.004));
+        return;
+      }
+      if (!this.dragging) {
         return;
       }
       const dx = event.clientX - this.dragX;
@@ -319,6 +369,8 @@ export class ThreeMazeViewer {
 
     const stopDrag = () => {
       this.dragging = false;
+      this.fpLookDragging = false;
+      this.fpLookPointerId = null;
     };
     el.addEventListener("pointerup", stopDrag);
     el.addEventListener("pointercancel", stopDrag);
@@ -339,8 +391,17 @@ export class ThreeMazeViewer {
     );
 
     el.addEventListener("dblclick", () => {
+      if (this.viewMode === "first") {
+        this.resetFirstPersonLook();
+        return;
+      }
       this.autoOrbit = true;
     });
+  }
+
+  private resetFirstPersonLook(): void {
+    this.fpYawOffset = 0;
+    this.fpPitchOffset = 0;
   }
 
   private cellToWorld(row: number, col: number): Vector3 {
@@ -413,11 +474,21 @@ export class ThreeMazeViewer {
 
     if (this.viewMode === "first") {
       const vec = dirVec(this.cameraState.dir);
+      const baseYaw = Math.atan2(vec.x, vec.z);
+      const yaw = baseYaw + this.fpYawOffset;
+      const pitch = Math.max(-0.72, Math.min(0.25, this.fpBasePitch + this.fpPitchOffset));
+      const forwardX = Math.sin(yaw) * Math.cos(pitch);
+      const forwardZ = Math.cos(yaw) * Math.cos(pitch);
+      const forwardY = Math.sin(pitch);
       const eyeX = this.cameraState.col + vec.x * this.fpNearOffset;
       const eyeZ = this.cameraState.row + vec.z * this.fpNearOffset;
       const eyeY = this.fpEyeHeight;
       this.camera.position.set(eyeX, eyeY, eyeZ);
-      this.camera.lookAt(eyeX + vec.x * this.fpLookDistance, eyeY - 0.05, eyeZ + vec.z * this.fpLookDistance);
+      this.camera.lookAt(
+        eyeX + forwardX * this.fpLookDistance,
+        eyeY + forwardY * this.fpLookDistance,
+        eyeZ + forwardZ * this.fpLookDistance
+      );
       if (this.headlamp) this.headlamp.position.copy(this.camera.position);
       return;
     }

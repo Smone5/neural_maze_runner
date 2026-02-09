@@ -47,6 +47,113 @@ const DIR_VECTORS: Record<Direction, { dr: number; dc: number }> = {
   3: { dr: 0, dc: -1 },
 };
 
+const DIR_ORDER: Direction[] = [0, 1, 2, 3];
+
+function isWalkable(layout: MazeLayout, row: number, col: number): boolean {
+  if (row < 0 || col < 0 || row >= layout.size || col >= layout.size) {
+    return false;
+  }
+  return layout.grid[row]?.[col] !== "#";
+}
+
+function key(row: number, col: number): string {
+  return `${row},${col}`;
+}
+
+function parseKey(k: string): { row: number; col: number } {
+  const [row, col] = k.split(",").map(Number);
+  return { row, col };
+}
+
+function directionFromDelta(dr: number, dc: number): Direction {
+  for (const dir of DIR_ORDER) {
+    const vec = DIR_VECTORS[dir];
+    if (vec.dr === dr && vec.dc === dc) {
+      return dir;
+    }
+  }
+  return 1;
+}
+
+function oppositeDir(dir: Direction): Direction {
+  return ((dir + 2) % 4) as Direction;
+}
+
+export function initialDirectionForMaze(layout: MazeLayout): Direction {
+  const start = layout.start;
+  const goal = layout.goal;
+  if (start.row === goal.row && start.col === goal.col) {
+    return 1;
+  }
+
+  // Prefer a heading that points toward the goal axis while staying in open space.
+  const dr = goal.row - start.row;
+  const dc = goal.col - start.col;
+  const horizontalDir: Direction = dc >= 0 ? 1 : 3;
+  const verticalDir: Direction = dr >= 0 ? 2 : 0;
+  const preferred: Direction[] =
+    Math.abs(dc) >= Math.abs(dr)
+      ? [horizontalDir, verticalDir, oppositeDir(horizontalDir), oppositeDir(verticalDir)]
+      : [verticalDir, horizontalDir, oppositeDir(verticalDir), oppositeDir(horizontalDir)];
+  for (const dir of preferred) {
+    const vec = DIR_VECTORS[dir];
+    if (isWalkable(layout, start.row + vec.dr, start.col + vec.dc)) {
+      return dir;
+    }
+  }
+
+  const startKey = key(start.row, start.col);
+  const goalKey = key(goal.row, goal.col);
+  const queue: Array<{ row: number; col: number }> = [{ row: start.row, col: start.col }];
+  const visited = new Set<string>([startKey]);
+  const parent = new Map<string, string>();
+
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    if (cur.row === goal.row && cur.col === goal.col) {
+      break;
+    }
+    for (const dir of DIR_ORDER) {
+      const vec = DIR_VECTORS[dir];
+      const nr = cur.row + vec.dr;
+      const nc = cur.col + vec.dc;
+      if (!isWalkable(layout, nr, nc)) {
+        continue;
+      }
+      const nk = key(nr, nc);
+      if (visited.has(nk)) {
+        continue;
+      }
+      visited.add(nk);
+      parent.set(nk, key(cur.row, cur.col));
+      queue.push({ row: nr, col: nc });
+    }
+  }
+
+  if (visited.has(goalKey)) {
+    let cursor = goalKey;
+    let prev = parent.get(cursor);
+    while (prev && prev !== startKey) {
+      cursor = prev;
+      prev = parent.get(cursor);
+    }
+    if (prev === startKey) {
+      const next = parseKey(cursor);
+      return directionFromDelta(next.row - start.row, next.col - start.col);
+    }
+  }
+
+  // Fallback: pick the first open direction by a stable order.
+  const fallbackOrder: Direction[] = [1, 2, 3, 0];
+  for (const dir of fallbackOrder) {
+    const vec = DIR_VECTORS[dir];
+    if (isWalkable(layout, start.row + vec.dr, start.col + vec.dc)) {
+      return dir;
+    }
+  }
+  return 1;
+}
+
 function turnLeft(dir: Direction): Direction {
   return ((dir + 3) % 4) as Direction;
 }
@@ -59,6 +166,7 @@ export class MazeEnv {
   layout: MazeLayout;
   rewards: RewardConfig;
   state: EnvState;
+  startDir: Direction;
   stepCount: number;
   episodeReturn: number;
   maxSteps: number;
@@ -67,13 +175,14 @@ export class MazeEnv {
     this.layout = layout;
     this.rewards = rewards;
     this.maxSteps = layout.size === 9 ? rewards.maxSteps9 : rewards.maxSteps11;
-    this.state = { row: layout.start.row, col: layout.start.col, dir: 1 };
+    this.startDir = initialDirectionForMaze(layout);
+    this.state = { row: layout.start.row, col: layout.start.col, dir: this.startDir };
     this.stepCount = 0;
     this.episodeReturn = 0;
   }
 
   reset(): Observation {
-    this.state = { row: this.layout.start.row, col: this.layout.start.col, dir: 1 };
+    this.state = { row: this.layout.start.row, col: this.layout.start.col, dir: this.startDir };
     this.stepCount = 0;
     this.episodeReturn = 0;
     return this.observe(this.state);
