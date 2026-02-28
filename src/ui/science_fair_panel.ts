@@ -116,7 +116,7 @@ interface CheckpointQuizQuestion {
   id: string;
   prompt: string;
   options: string[];
-  correctOption: number;
+  correctOptions: number[];
 }
 
 type TrendDirection = "improving" | "steady" | "worse";
@@ -274,7 +274,7 @@ export class ScienceFairPanel {
     this.scienceEpisodesInput = this.createInput("number", "10");
     this.scienceEpisodesInput.min = "1";
     this.scienceEpisodesInput.max = "500";
-    this.scienceTrialsInput = this.createInput("number", "3");
+    this.scienceTrialsInput = this.createInput("number", "1");
     this.scienceTrialsInput.min = "1";
     this.scienceTrialsInput.max = "20";
 
@@ -1439,7 +1439,7 @@ export class ScienceFairPanel {
 
     const quizCorrect = this.quizQuestions.reduce((count, question) => {
       const selected = this.quizResponses.get(question.id);
-      return count + (selected === question.correctOption ? 1 : 0);
+      return count + (selected !== undefined && question.correctOptions.includes(selected) ? 1 : 0);
     }, 0);
     const perfectQuiz = this.quizQuestions.length > 0 && quizCorrect === this.quizQuestions.length;
     this.arcadeStreak += 1;
@@ -2198,7 +2198,7 @@ export class ScienceFairPanel {
     const answered = this.quizResponses.size;
     const correct = this.quizQuestions.reduce((count, question) => {
       const selected = this.quizResponses.get(question.id);
-      return count + (selected === question.correctOption ? 1 : 0);
+      return count + (selected !== undefined && question.correctOptions.includes(selected) ? 1 : 0);
     }, 0);
     if (answered < total) {
       this.quizStatus.textContent = `Quick Check: ${answered}/${total} answered.`;
@@ -2211,48 +2211,65 @@ export class ScienceFairPanel {
     const algorithms = request.snapshots.map((snapshot) => snapshot.algorithm);
     if (algorithms.length === 0) return [];
 
-    const bestReturn = request.snapshots.reduce((best, current) =>
-      current.episodeReturn > best.episodeReturn ? current : best
-    );
-    const fewestSteps = request.snapshots.reduce((best, current) =>
-      current.steps < best.steps ? current : best
-    );
+    const optionList = [...algorithms];
+    const questions: CheckpointQuizQuestion[] = [];
 
-    let bestTrendAlgorithm = algorithms[0];
-    let bestTrendSuccess = -Infinity;
-    for (const item of request.history) {
-      const success = rollingSuccess(item.metrics, 10);
-      if (success > bestTrendSuccess) {
-        bestTrendSuccess = success;
-        bestTrendAlgorithm = item.algorithm;
+    const bestReturnValue = Math.max(...request.snapshots.map((s) => s.episodeReturn));
+    const returnCorrect = optionList
+      .map((_, i) => i)
+      .filter((i) => request.snapshots[i].episodeReturn === bestReturnValue);
+    questions.push({
+      id: "highest-return",
+      prompt:
+        returnCorrect.length === optionList.length
+          ? "All algorithms tied on return this episode. Pick any one."
+          : "Which algorithm had the highest return in this episode?",
+      options: optionList,
+      correctOptions: returnCorrect,
+    });
+
+    const fewestStepsValue = Math.min(...request.snapshots.map((s) => s.steps));
+    const stepsCorrect = optionList
+      .map((_, i) => i)
+      .filter((i) => request.snapshots[i].steps === fewestStepsValue);
+    questions.push({
+      id: "fewest-steps",
+      prompt:
+        stepsCorrect.length === optionList.length
+          ? "All algorithms used the same number of steps. Pick any one."
+          : "Which algorithm used the fewest steps in this episode?",
+      options: optionList,
+      correctOptions: stepsCorrect,
+    });
+
+    const hasEnoughHistory = request.history.some((h) => h.metrics.length >= 2);
+    if (hasEnoughHistory) {
+      let bestTrendSuccess = -Infinity;
+      const trendValues: number[] = [];
+      for (const item of request.history) {
+        const success = rollingSuccess(item.metrics, 10);
+        trendValues.push(success);
+        if (success > bestTrendSuccess) {
+          bestTrendSuccess = success;
+        }
+      }
+      const trendCorrect = optionList
+        .map((_, i) => i)
+        .filter((i) => i < trendValues.length && trendValues[i] === bestTrendSuccess);
+      if (trendCorrect.length > 0) {
+        questions.push({
+          id: "best-trend",
+          prompt:
+            trendCorrect.length === optionList.length
+              ? "All algorithms have the same success trend. Pick any one."
+              : "Which algorithm has the strongest current success trend (last 10)?",
+          options: optionList,
+          correctOptions: trendCorrect,
+        });
       }
     }
 
-    const optionList = [...algorithms];
-    const returnAnswer = Math.max(0, optionList.indexOf(bestReturn.algorithm));
-    const stepsAnswer = Math.max(0, optionList.indexOf(fewestSteps.algorithm));
-    const trendAnswer = Math.max(0, optionList.indexOf(bestTrendAlgorithm));
-
-    return [
-      {
-        id: "highest-return",
-        prompt: "Which algorithm had the highest return in this episode?",
-        options: optionList,
-        correctOption: returnAnswer,
-      },
-      {
-        id: "fewest-steps",
-        prompt: "Which algorithm used the fewest steps in this episode?",
-        options: optionList,
-        correctOption: stepsAnswer,
-      },
-      {
-        id: "best-trend",
-        prompt: "Which algorithm has the strongest current success trend (last 10)?",
-        options: optionList,
-        correctOption: trendAnswer,
-      },
-    ];
+    return questions;
   }
 
   private updateThoughtHeader(input: HTMLTextAreaElement, label: string, prompt: string, icon: string) {

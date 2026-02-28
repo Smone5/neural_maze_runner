@@ -1681,7 +1681,7 @@ async function main(): Promise<void> {
       ? clampInt(Number(sciencePanel.scienceEpisodesInput.value || 10), 1, 500)
       : getEpisodes();
     const trials = useScienceInputs
-      ? clampInt(Number(sciencePanel.scienceTrialsInput.value || 3), 1, 20)
+      ? clampInt(Number(sciencePanel.scienceTrialsInput.value || 1), 1, 20)
       : getTrials();
     const algorithms: AlgorithmType[] = useScienceInputs
       ? getScienceAlgorithms()
