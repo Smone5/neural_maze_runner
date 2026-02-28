@@ -1950,10 +1950,11 @@ async function main(): Promise<void> {
     );
 
     experimentPanel.setCsvExports(rawCsv, summaryCsv);
-    sciencePanel.goToStep(5);
 
     const chartData = { successByEpisode, stepsByEpisode, summaryRows };
     experimentPanel.render(chartData);
+
+    sciencePanel.goToStep(5);
 
     const random = summaryByAlg.get("Random");
     const q = summaryByAlg.get("Q-learning");
