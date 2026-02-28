@@ -1965,9 +1965,9 @@ export class ScienceFairPanel {
     }
 
     const chartTitles = [
-      "Learning Curve: Success by Episode",
-      "Compare Success Last 10",
-      "Compare Steps Last 10",
+      "Learning Curve: Success Rate by Episode",
+      "Algorithm Comparison: Success Rate",
+      "Algorithm Comparison: Steps to Solve",
     ];
     const chartImages = this.experimentPanel.getChartImageDataUrls();
     const chartsHtml = chartImages.length
@@ -1982,6 +1982,30 @@ export class ScienceFairPanel {
         )
         .join("")
       : `<p>No chart images are available yet. Run the Science Test first.</p>`;
+
+    const summaryRows = this.experimentPanel.getSummaryRows();
+    const summaryTableHtml = summaryRows.length
+      ? `<table class="summary-table">
+          <thead><tr>
+            <th>Algorithm</th>
+            <th>Success Rate (Last 10)</th>
+            <th>Avg Steps (Last 10)</th>
+            <th>Avg Return (Last 10)</th>
+            <th>Episodes to First Win</th>
+          </tr></thead>
+          <tbody>${summaryRows
+            .map(
+              (row) => `<tr>
+                <td><strong>${this.escapeHtml(row.algorithm)}</strong></td>
+                <td>${(row.avg_success_last10).toFixed(1)}%</td>
+                <td>${(row.avg_steps_last10).toFixed(1)}</td>
+                <td>${(row.avg_return_last10).toFixed(2)}</td>
+                <td>${(row.avg_episodes_to_first_success).toFixed(1)}</td>
+              </tr>`
+            )
+            .join("")}</tbody>
+        </table>`
+      : "";
 
     const journalHtml = this.journalEntries.length
       ? `<ol>${this.journalEntries
@@ -2001,20 +2025,26 @@ export class ScienceFairPanel {
         <meta charset="utf-8" />
         <title>Science Fair Project: AI Maze Lab</title>
         <style>
-          body { font-family: 'Segoe UI', sans-serif; padding: 50px; line-height: 1.6; color: #333; }
-          h1 { border-bottom: 3px solid #00adef; padding-bottom: 10px; color: #004a7c; }
-          h2 { color: #00adef; margin-top: 30px; border-left: 5px solid #00adef; padding-left: 15px; }
-          .section { margin-bottom: 25px; background: #f9f9f9; padding: 20px; border-radius: 8px; border: 1px solid #eee; }
+          body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; line-height: 1.7; color: #1e293b; max-width: 1000px; margin: 0 auto; }
+          h1 { border-bottom: 4px solid #00adef; padding-bottom: 12px; color: #004a7c; font-size: 28px; margin-bottom: 8px; }
+          h2 { color: #00adef; margin-top: 36px; border-left: 5px solid #00adef; padding-left: 15px; font-size: 22px; }
+          .section { margin-bottom: 20px; background: #f8fafc; padding: 20px 24px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 15px; }
           strong { color: #004a7c; }
           .page-break { page-break-after: always; }
-          .meta { font-style: italic; color: #666; margin-bottom: 40px; }
-          .chart-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
-          .chart { margin: 0; border: 1px solid #ddd; background: #fff; padding: 12px; border-radius: 8px; }
-          .chart img { width: 100%; max-width: 900px; height: auto; display: block; margin: 0 auto 8px auto; }
-          .chart figcaption { text-align: center; color: #444; font-size: 14px; }
+          .meta { font-style: italic; color: #64748b; margin-bottom: 32px; font-size: 14px; }
+          .chart-grid { display: flex; flex-direction: column; gap: 24px; }
+          .chart { margin: 0; border: 2px solid #cbd5e1; background: #fff; padding: 16px; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+          .chart img { width: 100%; height: auto; display: block; margin: 0 auto 10px auto; }
+          .chart figcaption { text-align: center; color: #475569; font-size: 15px; font-weight: 600; }
+          .summary-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+          .summary-table th { background: #00adef; color: #fff; padding: 10px 12px; text-align: left; font-weight: 600; }
+          .summary-table td { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; }
+          .summary-table tr:nth-child(even) td { background: #f1f5f9; }
+          .summary-table tr:hover td { background: #e0f2fe; }
           @media print {
             body { padding: 20px; }
-            .chart { break-inside: avoid; }
+            .chart { break-inside: avoid; border-color: #94a3b8; }
+            .page-break { page-break-after: always; }
           }
         </style>
         <script>
@@ -2074,10 +2104,16 @@ export class ScienceFairPanel {
           ${journalHtml}
         </div>
 
-        <h2>IV. RESULTS CHARTS</h2>
+        <h2>IV. RESULTS</h2>
         <div class="section chart-grid">
           ${chartsHtml}
         </div>
+        ${summaryTableHtml ? `<div class="section">
+          <strong>Data Summary Table:</strong>
+          ${summaryTableHtml}
+        </div>` : ""}
+
+        <div class="page-break"></div>
 
         <h2>V. CONCLUSION & ANALYSIS</h2>
         <div class="section">

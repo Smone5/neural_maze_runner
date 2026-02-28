@@ -2356,6 +2356,10 @@ button:disabled {
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+.wizard-card:has(.experiment-charts) {
+  grid-column: 1 / -1;
+}
+
 /* --- Gold Medal Science Fair Styles --- */
 
 .science-panel textarea {
@@ -6129,8 +6133,8 @@ select.data-entry-input {
 
 .progress-chart-container canvas {
   flex: 1;
-  width: 100% !important;
-  height: auto !important;
+  width: 100%;
+  min-height: 0;
 }
 
 @media (max-width: 1000px) {

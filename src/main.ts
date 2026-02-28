@@ -503,16 +503,6 @@ async function main(): Promise<void> {
   const dataRunBtn = document.createElement("button");
   dataRunBtn.className = "btn-experiment big-run-btn";
   dataRunBtn.textContent = "🚀 START SCIENCE TEST";
-  dataRunBtn.onclick = () => {
-    // This button starts the experiment
-    // We need to trigger the experiment run logic.
-    // previously it was seemingly handled by `experimentPanel`? 
-    // Wait, main.ts had logic for starting experiment? 
-    // No, checking main.ts again... I might need to see where runExperiment logic is.
-    // Ah, I missed where `dataRunBtn.onclick` was defined in the previous view. 
-    // It wasn't defined in the snippet I saw! It just created the button.
-    // I need to find the click handler for starting experiment.
-  };
 
   experimentPanel.runnerRoot.append(dataRunBtn);
 
@@ -1941,8 +1931,6 @@ async function main(): Promise<void> {
       );
     }
 
-    experimentPanel.render({ successByEpisode, stepsByEpisode, summaryRows });
-
     const rawCsv = toCsv(
       ["algorithm", "maze_name", "trial", "seed", "episode", "steps", "success", "episode_return"],
       rawRows
@@ -1963,6 +1951,9 @@ async function main(): Promise<void> {
 
     experimentPanel.setCsvExports(rawCsv, summaryCsv);
     sciencePanel.goToStep(5);
+
+    const chartData = { successByEpisode, stepsByEpisode, summaryRows };
+    experimentPanel.render(chartData);
 
     const random = summaryByAlg.get("Random");
     const q = summaryByAlg.get("Q-learning");
@@ -2761,9 +2752,9 @@ async function main(): Promise<void> {
   setStatus("Ready.");
 
   window.addEventListener("resize", () => {
-    // Re-trigger Mode logic to force canvas resizes
     setAppMode(currentMode);
   });
+
 }
 
 void main().catch((err) => {

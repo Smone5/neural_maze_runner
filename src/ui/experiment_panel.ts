@@ -1,10 +1,11 @@
 import { Chart, registerables } from "chart.js";
+import ChartDataLabels from "chartjs-plugin-datalabels";
 import { EpisodeMetrics } from "../core/metrics";
 import { canvasToOpaquePngDataUrl, SummaryRow, triggerDownload, triggerPngDownload } from "../core/export";
 
-Chart.register(...registerables);
+Chart.register(...registerables, ChartDataLabels);
 
-const ALGORITHM_COLORS = ["#8b8b8b", "#ff5a36", "#3f8cff", "#2bb673", "#9f7aea", "#f6ad55", "#00a3a3"];
+const ALGORITHM_COLORS = ["#6b7280", "#ef4444", "#3b82f6", "#22c55e", "#a855f7", "#f59e0b", "#06b6d4"];
 const CHART_EXPORT_WIDTH = 1200;
 const CHART_EXPORT_HEIGHT = 680;
 
@@ -62,6 +63,7 @@ export class ExperimentPanel {
   private chart3: Chart | null = null;
   private rawCsv: string | null = null;
   private summaryCsv: string | null = null;
+  private lastSummaryRows: SummaryRow[] = [];
   private downloadChartsBtn: HTMLButtonElement;
   private downloadRawBtn: HTMLButtonElement;
   private downloadSummaryBtn: HTMLButtonElement;
@@ -268,6 +270,7 @@ export class ExperimentPanel {
     this.chart1?.destroy();
     this.chart2?.destroy();
     this.chart3?.destroy();
+    this.lastSummaryRows = data.summaryRows;
 
     const labels = new Set<string>();
     for (const arr of data.successByEpisode.values()) {
@@ -280,52 +283,68 @@ export class ExperimentPanel {
     const colorByAlgorithm = new Map(
       orderedAlgorithms.map((algorithm, idx) => [algorithm, ALGORITHM_COLORS[idx % ALGORITHM_COLORS.length]])
     );
-    const printSafeText = "#111827";
+    const text = "#1e293b";
+    const gridColor = "rgba(15, 23, 42, 0.18)";
     const algorithmLabels = data.summaryRows.map((row) => this.breakLabel(row.algorithm));
+
+    const titleFont = { size: 26, weight: "bold" as const };
+    const axisLabelFont = { size: 16, weight: "bold" as const };
+    const tickFont = { size: 14 };
+    const legendFont = { size: 15 };
+
+    [this.c1, this.c2, this.c3].forEach((c) => this.configureChartCanvas(c));
 
     this.chart1 = new Chart(this.c1, {
       type: "line",
       data: {
         labels: [...labels],
         datasets: [...data.successByEpisode.entries()].map(([algorithm, values], idx) => ({
-          label: `${algorithm} success %`,
+          label: algorithm,
           data: values,
           borderColor: colorByAlgorithm.get(algorithm) ?? ALGORITHM_COLORS[idx % ALGORITHM_COLORS.length],
-          backgroundColor: "rgba(17, 24, 39, 0.06)",
+          backgroundColor: "rgba(17, 24, 39, 0.04)",
           borderWidth: 3,
-          pointRadius: 2,
-          tension: 0.2,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          tension: 0.25,
         })),
       },
       options: {
-        responsive: true,
+        responsive: false,
         maintainAspectRatio: false,
         animation: false,
+        layout: { padding: { top: 10, right: 20, bottom: 10, left: 10 } },
         plugins: {
+          datalabels: { display: false },
           legend: {
+            position: "top",
             labels: {
-              color: printSafeText,
-              boxWidth: 16,
-              font: { size: 13 },
+              color: text,
+              boxWidth: 20,
+              padding: 20,
+              font: legendFont,
+              usePointStyle: true,
+              pointStyle: "circle",
             },
           },
           title: {
             display: true,
-            text: "Learning Curve: Success by Episode",
-            color: printSafeText,
-            font: { size: 24 },
+            text: "Learning Curve: Success Rate by Episode",
+            color: text,
+            font: titleFont,
+            padding: { bottom: 16 },
           },
         },
         scales: {
           x: {
-            ticks: { color: printSafeText, maxTicksLimit: 20 },
-            grid: { color: "rgba(15, 23, 42, 0.12)" },
-            title: { display: true, text: "Episode", color: printSafeText },
+            ticks: { color: text, maxTicksLimit: 20, font: tickFont },
+            grid: { color: gridColor },
+            title: { display: true, text: "Episode", color: text, font: axisLabelFont },
           },
           y: {
-            ticks: { color: printSafeText },
-            grid: { color: "rgba(15, 23, 42, 0.12)" },
-            title: { display: true, text: "Success (%)", color: printSafeText },
+            ticks: { color: text, font: tickFont, callback: (v) => `${v}%` },
+            grid: { color: gridColor },
+            title: { display: true, text: "Success Rate (%)", color: text, font: axisLabelFont },
             min: 0,
             max: 100,
           },
@@ -333,57 +352,70 @@ export class ExperimentPanel {
       },
     });
 
+    const barDataLabelsConfig = {
+      display: true,
+      anchor: "end" as const,
+      align: "top" as const,
+      color: text,
+      font: { size: 16, weight: "bold" as const },
+      formatter: (value: number) => Math.round(value).toString(),
+      offset: 4,
+    };
+
     this.chart2 = new Chart(this.c2, {
       type: "bar",
       data: {
         labels: algorithmLabels,
         datasets: [
           {
-            label: "Average success last 10 (%)",
+            label: "Average Success (Last 10 Episodes)",
             data: data.summaryRows.map((row) => row.avg_success_last10),
             backgroundColor: data.summaryRows.map(
               (row, idx) => colorByAlgorithm.get(row.algorithm) ?? ALGORITHM_COLORS[idx % ALGORITHM_COLORS.length]
             ),
-            borderColor: "#0f172a",
-            borderWidth: 1,
+            borderColor: "#1e293b",
+            borderWidth: 2,
+            borderRadius: 6,
+            barPercentage: 0.7,
           },
         ],
       },
       options: {
-        responsive: true,
+        responsive: false,
         maintainAspectRatio: false,
         animation: false,
+        layout: { padding: { top: 30, right: 20, bottom: 10, left: 10 } },
         plugins: {
+          datalabels: { ...barDataLabelsConfig, formatter: (v: number) => `${Math.round(v)}%` },
           legend: {
-            labels: {
-              color: printSafeText,
-              font: { size: 13 },
-            },
+            display: true,
+            labels: { color: text, font: legendFont, boxWidth: 20, padding: 20 },
           },
           title: {
             display: true,
-            text: "Compare Success Last 10",
-            color: printSafeText,
-            font: { size: 24 },
+            text: "Algorithm Comparison: Success Rate",
+            color: text,
+            font: titleFont,
+            padding: { bottom: 16 },
           },
         },
         scales: {
           x: {
             ticks: {
-              color: printSafeText,
+              color: text,
               autoSkip: false,
               maxRotation: 0,
               minRotation: 0,
-              font: { size: 13 },
+              font: { size: 15, weight: "bold" as const },
             },
             grid: { display: false },
           },
           y: {
-            ticks: { color: printSafeText },
-            grid: { color: "rgba(15, 23, 42, 0.12)" },
-            title: { display: true, text: "Success Last 10 (%)", color: printSafeText },
+            ticks: { color: text, font: tickFont, callback: (v) => `${v}%` },
+            grid: { color: gridColor },
+            title: { display: true, text: "Success Rate (%)", color: text, font: axisLabelFont },
             min: 0,
-            max: 100,
+            max: 110,
           },
         },
       },
@@ -395,49 +427,52 @@ export class ExperimentPanel {
         labels: algorithmLabels,
         datasets: [
           {
-            label: "Average steps last 10",
+            label: "Average Steps (Last 10 Episodes)",
             data: data.summaryRows.map((row) => row.avg_steps_last10),
             backgroundColor: data.summaryRows.map(
               (row, idx) => colorByAlgorithm.get(row.algorithm) ?? ALGORITHM_COLORS[idx % ALGORITHM_COLORS.length]
             ),
-            borderColor: "#0f172a",
-            borderWidth: 1,
+            borderColor: "#1e293b",
+            borderWidth: 2,
+            borderRadius: 6,
+            barPercentage: 0.7,
           },
         ],
       },
       options: {
-        responsive: true,
+        responsive: false,
         maintainAspectRatio: false,
         animation: false,
+        layout: { padding: { top: 30, right: 20, bottom: 10, left: 10 } },
         plugins: {
+          datalabels: barDataLabelsConfig,
           legend: {
-            labels: {
-              color: printSafeText,
-              font: { size: 13 },
-            },
+            display: true,
+            labels: { color: text, font: legendFont, boxWidth: 20, padding: 20 },
           },
           title: {
             display: true,
-            text: "Compare Steps Last 10",
-            color: printSafeText,
-            font: { size: 24 },
+            text: "Algorithm Comparison: Steps to Solve",
+            color: text,
+            font: titleFont,
+            padding: { bottom: 16 },
           },
         },
         scales: {
           x: {
             ticks: {
-              color: printSafeText,
+              color: text,
               autoSkip: false,
               maxRotation: 0,
               minRotation: 0,
-              font: { size: 13 },
+              font: { size: 15, weight: "bold" as const },
             },
             grid: { display: false },
           },
           y: {
-            ticks: { color: printSafeText },
-            grid: { color: "rgba(15, 23, 42, 0.12)" },
-            title: { display: true, text: "Average Steps (Last 10)", color: printSafeText },
+            ticks: { color: text, font: tickFont },
+            grid: { color: gridColor },
+            title: { display: true, text: "Average Steps", color: text, font: axisLabelFont },
             beginAtZero: true,
           },
         },
@@ -477,22 +512,31 @@ export class ExperimentPanel {
   }
 
   downloadAllPngs(): boolean {
+    if (!this.chart1 || !this.chart2 || !this.chart3) {
+      this.setStatus("Charts have not been rendered yet. Run the experiment first.");
+      return false;
+    }
     const ok1 = triggerPngDownload("learning_curve_success.png", this.c1);
     const ok2 = triggerPngDownload("compare_success_last10.png", this.c2);
     const ok3 = triggerPngDownload("compare_steps_last10.png", this.c3);
-    return ok1 && ok2 && ok3;
+    const allOk = ok1 && ok2 && ok3;
+    this.setStatus(allOk ? "All chart PNGs saved." : "Some chart PNGs could not be exported. Check that charts are visible.");
+    return allOk;
   }
 
   private downloadAllExports(): void {
-    this.downloadRawCsv();
-    this.downloadSummaryCsv();
-    this.downloadAllPngs();
+    const csvOk = this.downloadRawCsv() && this.downloadSummaryCsv();
+    const pngOk = this.downloadAllPngs();
+    if (csvOk && pngOk) {
+      this.setStatus("All exports saved (CSV + PNG).");
+    }
   }
 
   private configureChartCanvas(canvas: HTMLCanvasElement): void {
-    // Canvas size will be handled by Chart.js responsive mode and CSS
+    canvas.width = CHART_EXPORT_WIDTH;
+    canvas.height = CHART_EXPORT_HEIGHT;
     canvas.style.width = "100%";
-    canvas.style.height = "400px"; // Default height
+    canvas.style.height = "auto";
   }
 
   private breakLabel(label: string): string | string[] {
@@ -518,6 +562,10 @@ export class ExperimentPanel {
 
   hasRenderedResults(): boolean {
     return Boolean(this.chart1 && this.chart2 && this.chart3);
+  }
+
+  getSummaryRows(): SummaryRow[] {
+    return this.lastSummaryRows;
   }
 }
 
