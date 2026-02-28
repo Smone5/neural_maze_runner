@@ -150,7 +150,7 @@ export class Dashboard {
         `Randomness level (epsilon): ${step.epsilon.toFixed(3)}`,
         `Robot mode: ${robotMode}`,
         `Win rate (last 10 completed tries): ${step.rollingSuccessLast10.toFixed(1)}%`,
-        `Average moves on wins (last 10): ${step.rollingAvgStepsLast10.toFixed(1)}`,
+        `Average moves (last 10): ${step.rollingAvgStepsLast10.toFixed(1)}`,
         qSummary,
       ];
 

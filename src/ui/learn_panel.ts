@@ -204,7 +204,7 @@ const LESSONS: Record<number, LessonContent> = {
       "Use at least 3 trials so one lucky run does not trick you.",
     ],
     watchFor: [
-      "In Step 4, watch each live card for 'Win rate (last 10)' and 'Avg steps on wins (last 10)'.",
+      "In Step 4, watch each live card for 'Win rate (last 10)' and 'Avg steps (last 10)'.",
       "In Step 5, read 'Learning Curve: Success by Episode'.",
       "Then compare 'Compare Success Last 10' and 'Compare Steps Last 10' together.",
     ],

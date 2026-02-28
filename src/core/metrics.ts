@@ -15,7 +15,7 @@ export function rollingSuccess(metrics: EpisodeMetrics[], windowSize: number): n
 }
 
 export function rollingAvgSteps(metrics: EpisodeMetrics[], windowSize: number): number {
-  const slice = metrics.slice(Math.max(0, metrics.length - windowSize)).filter((m) => m.success);
+  const slice = metrics.slice(Math.max(0, metrics.length - windowSize));
   if (slice.length === 0) {
     return 0;
   }

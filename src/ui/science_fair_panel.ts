@@ -271,7 +271,7 @@ export class ScienceFairPanel {
 
   private initInputs() {
     // --- Step 3 Setup Inputs ---
-    this.scienceEpisodesInput = this.createInput("number", "15");
+    this.scienceEpisodesInput = this.createInput("number", "10");
     this.scienceEpisodesInput.min = "1";
     this.scienceEpisodesInput.max = "500";
     this.scienceTrialsInput = this.createInput("number", "3");

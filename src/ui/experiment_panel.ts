@@ -122,7 +122,7 @@ export class ExperimentPanel {
         "Epsilon: -",
         "Mode: -",
         "Win rate (last 10): -",
-        "Avg steps on wins (last 10): -",
+        "Avg steps (last 10): -",
         "Q-values (F/L/R): -",
       ]);
     }
@@ -208,7 +208,7 @@ export class ExperimentPanel {
           "Epsilon: -",
           "Mode: -",
           "Win rate (last 10): -",
-          "Avg steps on wins (last 10): -",
+          "Avg steps (last 10): -",
           "Q-values (F/L/R): -",
         ]);
       }
@@ -245,7 +245,7 @@ export class ExperimentPanel {
       `Epsilon: ${snapshot.epsilon.toFixed(3)}`,
       `Mode: ${snapshot.explored ? "Explore" : "Exploit"}`,
       `Win rate (last 10): ${snapshot.rollingSuccessLast10.toFixed(1)}%`,
-      `Avg steps on wins (last 10): ${snapshot.rollingAvgStepsLast10.toFixed(1)}`,
+      `Avg steps (last 10): ${snapshot.rollingAvgStepsLast10.toFixed(1)}`,
       `Q-values (F/L/R): ${snapshot.qValues.map((value) => this.formatLiveQ(value)).join(" / ")}`,
     ]);
   }
